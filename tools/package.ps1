@@ -22,9 +22,11 @@ $Allow = @(
     "^$mod/Textures/[a-z0-9-]+\.png$"
 )
 $Never = '(^|/)(dev|dev-unlock|spike|showcase|book-mesh|debug|config)\.txt$|\.log$|\.tmp$'
+# main.lua requires these only when dev.txt or spike.txt is present.
+$DevOnly = "^$mod/Scripts/horticulture_(dev|spike)\.lua$"
 
 $tracked = git ls-files
-$files = $tracked | Where-Object { $f = $_; ($Allow | Where-Object { $f -match $_ }).Count -gt 0 }
+$files = $tracked | Where-Object { $f = $_; ($Allow | Where-Object { $f -match $_ }).Count -gt 0 } | Where-Object { $_ -notmatch $DevOnly }
 $bad = $files | Where-Object { $_ -match $Never }
 if ($bad) { throw "Refusing to pack: $($bad -join ', ')" }
 foreach ($need in "$mod/enabled.txt", "$mod/Scripts/main.lua", "$mod/Textures/horticulture-skill-icon.png", "$mod/README.md", "$mod/LICENSE") {
