@@ -1,0 +1,14 @@
+# Tool output and local helpers
+tools/out/
+tools/pylib/
+
+# Developer switches never ship (tools/check_release.ps1)
+SkillsOfAshenfallHorticulture/dev.txt
+SkillsOfAshenfallHorticulture/dev-unlock.txt
+SkillsOfAshenfallHorticulture/book-mesh.txt
+
+# Saves and temporary files
+Saves/
+Saves.*/
+*.tmp
+*.bak
