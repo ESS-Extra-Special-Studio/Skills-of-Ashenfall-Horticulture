@@ -386,9 +386,26 @@ local function lore_api()
     return U.live_of("LorePopupUIAPI")[1]
 end
 
+-- UE4SS reads a soft-object parameter as its TSoftObjectPtr userdata without
+-- checking the Lua type, so anything else (a table) crashes the game. The
+-- userdata comes from KismetSystemLibrary; nil when it cannot be made.
+local function soft_ref(obj)
+    local ksl = UEHelpers.GetKismetSystemLibrary()
+    if not (U.valid(ksl) and U.valid(obj)) then return nil end
+    local ok, ref = pcall(function() return ksl:Conv_ObjectToSoftObjectReference(obj) end)
+    if not ok or type(ref) ~= "userdata" then return nil end
+    local okT, kind = pcall(function() return ref:type() end)
+    if okT and type(kind) == "string" and not kind:find("Soft", 1, true) then return nil end
+    return ref
+end
+
+-- The value to pass for one OpenLorePopup parameter, or nil when no safe
+-- value can be made (the call is then not made).
 local function arg_for(prop, entry)
     local t = U.prop_type(prop)
-    if t == "ObjectProperty" then
+    if t == "SoftObjectProperty" then
+        return soft_ref(entry)
+    elseif t == "ObjectProperty" then
         local inner = ""
         pcall(function() inner = U.fname(prop:GetPropertyClass()) end)
         if inner:find("Journal", 1, true) then return entry end
@@ -400,7 +417,7 @@ local function arg_for(prop, entry)
     elseif t == "NameProperty" then return FName("None")
     elseif t:find("Int", 1, true) or t:find("Float", 1, true) or t:find("Double", 1, true) or t == "ByteProperty" or t == "EnumProperty" then return 0
     end
-    return {}
+    return nil
 end
 
 -- Opens the game's lore popup on a journal entry through LorePopupUIAPI.
@@ -409,7 +426,7 @@ local function open_via_api(entry)
     if not api then return false, "no LorePopupUIAPI instance" end
     local fn = U.find_function(api, "OpenLorePopup")
     if not fn then return false, "OpenLorePopup not found" end
-    local args, n, sig = {}, 0, {}
+    local args, n, sig, missing = {}, 0, {}, nil
     pcall(function()
         fn:ForEachProperty(function(p)
             local name = U.prop_name(p)
@@ -417,10 +434,12 @@ local function open_via_api(entry)
             if name ~= "ReturnValue" then
                 n = n + 1
                 args[n] = arg_for(p, entry)
+                if args[n] == nil then missing = missing or (name .. ":" .. U.prop_type(p)) end
             end
         end)
     end)
     U.log_once("opensig", "OpenLorePopup(" .. table.concat(sig, ", ") .. ") on " .. U.full(api))
+    if missing then return false, "no safe value for parameter " .. missing end
     local ok, err = pcall(function() api:OpenLorePopup(table.unpack(args, 1, n)) end)
     return ok, err
 end

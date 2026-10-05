@@ -46,11 +46,25 @@ function U.game(fn)
     if ExecuteInGameThread then ExecuteInGameThread(wrapped) else wrapped() end
 end
 
+-- Runs fn every ms milliseconds, on the game thread when UE4SS can loop there.
+-- Queuing game-thread work from LoopAsync's thread many times a second can
+-- corrupt UE4SS's callback references, so the fallback skips a beat while the
+-- previous one is still queued.
 function U.every(ms, name, fn)
-    if not LoopAsync then return end
-    LoopAsync(ms, function()
+    local function run()
         local ok, err = pcall(fn)
         if not ok then U.log_once(name .. tostring(err), name .. " failed: " .. tostring(err)) end
+    end
+    if LoopInGameThreadWithDelay and pcall(LoopInGameThreadWithDelay, ms, function() run() return false end) then
+        return
+    end
+    if not LoopAsync then return end
+    local waiting = false
+    LoopAsync(ms, function()
+        if not waiting then
+            waiting = true
+            U.game(function() waiting = false run() end)
+        end
         return false
     end)
 end
