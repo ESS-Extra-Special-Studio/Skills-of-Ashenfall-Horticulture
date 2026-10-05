@@ -30,8 +30,8 @@ if not okESL then
     log("ESL:DragonWilds is missing or failed to load. Install it in the same ~mods folder as this mod. (" .. tostring(ESL) .. ")")
     return
 end
-if not (ESL.RequireVersion and ESL.RequireVersion("1.1.0", MOD)) then
-    log("ESL:DragonWilds is too old. Install ESL:DragonWilds 1.1.0 or later.")
+if not (ESL.RequireVersion and ESL.RequireVersion("1.0.0", MOD)) then
+    log("ESL:DragonWilds is too old. Install ESL:DragonWilds 1.0.0 or later.")
     return
 end
 

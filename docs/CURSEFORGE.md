@@ -28,9 +28,11 @@ Horticulture is the second Skills of Ashenfall skill for RuneScape: Dragonwilds,
 2. Install ESL:DragonWilds and Skills of Ashenfall: Historian (both Required Dependencies).
 3. Install Horticulture. All three folders sit side by side in `RSDragonwilds\Content\Paks\~mods` and ship with `enabled.txt`.
 
+To uninstall, remove Horticulture in the CurseForge app (or delete its folder). Your progress stays in `%LOCALAPPDATA%\RSDragonwilds\Saved\ESLDragonWilds` in case you come back; the game's own saves and farming are never changed.
+
 ## Relations
 
-- **Required Dependency:** ESL:DragonWilds 1.1.0 or later.
+- **Required Dependency:** ESL:DragonWilds 1.0.0 or later.
 - **Required Dependency:** Skills of Ashenfall: Historian 1.0.0 or later.
 - **Not on CurseForge:** UE4SS for RuneScape: Dragonwilds (see Install).
 
@@ -42,11 +44,21 @@ Skills of Ashenfall is a fan project by Extra Special Studio. It is not affiliat
 
 ## Screenshots
 
-From `<studio>\docs\screenshots\test-session-2026-10-05\`:
+From `<studio>\docs\screenshots\release-1.0.0\` (Horticulture was unlocked early on a test copy of the save for these; no test tiles, test perks or dev tools showing):
 
-1. `26-book-01.png`: the Observances of Brassica Prime in the game's lore popup.
-2. `27-book-end.png`: "The Fifth Observance. Do not make the wine."
-3. `28-ledger-hort.png`: the End status panel.
-4. The badge: `SkillsOfAshenfallHorticulture/Textures/horticulture-skill-icon.png`.
+1. `horticulture-hymnal-in-world.png`: the Annotated Hymnal on the grass by the cabbage patch, with the "Lore" prompt and its Historian 25 requirement.
+2. `horticulture-hymnal-wide.png`: the hymnal in the meadow, wider.
+3. `horticulture-level-up-badge.png`: the game's own level-up banner with the Horticulture badge.
+4. `horticulture-level-up-8.png`: the same banner reaching level 8.
+5. `horticulture-character-select.png`: Historian 12 and Horticulture 08/25 on the character select grid, total level 134 on both sides.
+6. `horticulture-skills-detail.png`: the Horticulture tile and detail panel in the skills menu.
 
-Still to capture (these need a character with Horticulture legitimately unlocked, or a separate test character): the hymnal in place by the cabbage patch, the Horticulture tile on character select and in the skills menu, a farming XP popup, and a Discovery Catalogue card. The `dev-unlock` test screenshots are not for the page.
+From `test-session-2026-10-05\`:
+
+7. `26-book-01.png`: the Observances of Brassica Prime in the game's lore popup.
+8. `27-book-end.png`: "The Fifth Observance. Do not make the wine."
+9. `28-ledger-hort.png`: the End status panel.
+
+The badge: `SkillsOfAshenfallHorticulture/Textures/horticulture-skill-icon.png`.
+
+Not captured: a farming XP popup and a Discovery Catalogue card (no farm plot was in reach on the test character). The `dev-unlock` and `evidence-*` screenshots are not for the page.

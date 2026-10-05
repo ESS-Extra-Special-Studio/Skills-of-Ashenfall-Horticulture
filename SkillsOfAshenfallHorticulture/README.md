@@ -6,9 +6,9 @@ Horticulture is the second Skills of Ashenfall skill. It is hidden until you ear
 
 ## Requires
 
-- ESL:DragonWilds 1.1.0 or later (Required Dependency)
+- ESL:DragonWilds 1.0.0 or later (Required Dependency)
 - Skills of Ashenfall: Historian 1.0.0 or later (Required Dependency)
-- UE4SS for RuneScape: Dragonwilds
+- UE4SS for RuneScape: Dragonwilds (3.0.1, the "UE4SS Steam (latest)" build)
 
 ## Install
 
@@ -29,11 +29,13 @@ SkillsOfAshenfallHistorian : 1
 SkillsOfAshenfallHorticulture : 1
 ```
 
+If `Binaries\Win64\ue4ss\Mods\mods.txt` names one of these mods, that line wins over `enabled.txt`: `: 0` there keeps the mod off.
+
 ## Unlocking Horticulture
 
 1. Reach Historian 25 and Farming 25.
 2. Find the **Annotated Hymnal** by the wild cabbage patch north-west of the Wise Old Man in Bramblemead Valley, where his farming lessons begin.
-3. Read it. Below Historian 25 the second script between its lines cannot be made out.
+3. Read it. Its prompt reads "Lore", like every lore item in the game, with the Historian 25 requirement beside it. Below Historian 25 the second script between its lines cannot be made out.
 
 Horticulture then appears in your skills menu and on the character select screen, and the reading itself takes you to level 2. The hymnal stays where it is, so you can read it again; Shift+End also rereads it anywhere once you have.
 
@@ -88,7 +90,11 @@ End was chosen because F10 opens the console with ConsoleEnabler, Home belongs t
 
 ## Progress
 
-Your Horticulture progress is kept with the game's saved data by ESL:DragonWilds, as `<Character>.Horticulture.txt` in `%LOCALAPPDATA%\RSDragonwilds\Saved\ESLDragonWilds`. Updating or reinstalling the mod does not touch it.
+Your Horticulture progress is kept with the game's saved data by ESL:DragonWilds, as `<character id>.Horticulture.txt` in `%LOCALAPPDATA%\RSDragonwilds\Saved\ESLDragonWilds`. Updating or reinstalling the mod does not touch it.
+
+## Uninstall
+
+Delete the `SkillsOfAshenfallHorticulture` folder from `~mods`, or disable it in CurseForge. Horticulture leaves the skills menu, character select and totals; your progress file stays in case you reinstall, and you can delete the `*.Horticulture.txt` files to remove it for good. The game's own saves and farming are never changed.
 
 ## Not affiliated
 
