@@ -550,6 +550,89 @@ function World.Give(path, count)
     return false
 end
 
+-- The actor the game's interaction prompt is on, or nil.
+function World.PromptTarget()
+    for _, prompt in ipairs(U.live_of(PROMPT)) do
+        if U.visible(prompt) then
+            local actor = prop(prompt, "CurrentWorldActor")
+            if U.valid(actor) then return actor end
+        end
+    end
+    return nil
+end
+
+-- Where the player stands (feet) and which way the camera faces (yaw).
+function World.Facing()
+    local pawn = U.pawn()
+    local loc = U.location(pawn)
+    if not loc then return nil end
+    local half = 90
+    pcall(function() half = pawn.CapsuleComponent:GetScaledCapsuleHalfHeight() end)
+    local yaw = 0
+    pcall(function() yaw = U.pc():GetControlRotation().Yaw end)
+    return { X = loc.X, Y = loc.Y, Z = loc.Z - half }, yaw
+end
+
+-- Which world save is loaded, so a Primelet set down in one world does not
+-- appear in another. Read from the game's world-save settings; "?" when
+-- they cannot be read (then Primelets show in every world).
+local WORLD_HOLDERS = { "GameInstance", "GameStateBase", "GameModeBase", "SpudSubsystem" }
+local WORLD_FIELDS = { "SaveSlotName", "SlotName", "WorldName", "WorldSaveGuid" }
+local worldKey, worldKeyFrom = nil, nil
+
+local function text_of(v)
+    local s = nil
+    pcall(function() s = v:ToString() end)
+    if s == nil and type(v) == "string" then s = v end
+    if s == nil and type(v) == "number" then s = tostring(v) end
+    if s and s ~= "" and s ~= "None" then return s end
+    return nil
+end
+
+local function world_from(obj, label)
+    if not U.valid(obj) then return nil end
+    local settings = prop(obj, "WorldSaveSettings")
+    for _, holder in ipairs({ settings, obj }) do
+        if holder ~= nil then
+            for _, f in ipairs(WORLD_FIELDS) do
+                local v = nil
+                pcall(function() v = holder[f] end)
+                local s = v ~= nil and text_of(v) or nil
+                if s then return s, label .. (holder == settings and ".WorldSaveSettings." or ".") .. f end
+            end
+        end
+    end
+    return nil
+end
+
+function World.WorldKey()
+    if worldKey then return worldKey end
+    local key, from = nil, nil
+    pcall(function()
+        local gi = UEHelpers.GetGameInstance and UEHelpers.GetGameInstance()
+        key, from = world_from(gi, "GameInstance")
+    end)
+    if not key then
+        for _, cls in ipairs(WORLD_HOLDERS) do
+            for _, obj in ipairs(U.live_of(cls)) do
+                key, from = world_from(obj, U.fname(obj:GetClass()))
+                if key then break end
+            end
+            if key then break end
+        end
+    end
+    if key then
+        worldKey, worldKeyFrom = (key:gsub("[|\r\n=]", "_")), from
+        U.log("World key " .. worldKey .. " (" .. from .. ")")
+        return worldKey
+    end
+    U.log_once("noworldkey", "World save name not readable; Primelets show in every world")
+    return "?"
+end
+
+-- A new world is loading: read the key again.
+function World.ResetWorldKey() worldKey, worldKeyFrom = nil, nil end
+
 -- A server or single player: the only machines where v1 splicing runs.
 function World.IsServer()
     local ok, yes = pcall(function()

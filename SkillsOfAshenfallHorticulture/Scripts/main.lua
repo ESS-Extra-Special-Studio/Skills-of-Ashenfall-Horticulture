@@ -107,6 +107,7 @@ local config = {
     quiet = Settings.quiet,
     debug = Settings.debug,
     actionKey = Settings.action_key,
+    primeletChance = Settings.primelet_chance,
 }
 
 Book.Start(config)
@@ -147,7 +148,9 @@ RegisterKeyBindAsync(Key[STATUS_KEY], {}, function()
         return
     end
     ESL.ToggleStatus(SKILL, function()
-        return Splicing.SatchelLine() .. "  |  " .. Splicing.CatalogueLine() .. "  |  " .. Training.CatalogueLine()
+        local prime = Splicing.PrimeletLine()
+        return Splicing.SatchelLine() .. (prime ~= "" and ("  |  " .. prime) or "") .. "  |  " .. Splicing.CatalogueLine()
+            .. "  |  " .. Training.CatalogueLine()
     end)
 end)
 

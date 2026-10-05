@@ -3,6 +3,8 @@
 -- game side (horticulture_splicing) supplies what the player is aiming at
 -- and pays the XP.
 local Rules = require("horticulture_splice_rules")
+local Store = require("horticulture_splice_store")
+local Primelet = require("horticulture_primelet")
 
 local Core = {}
 
@@ -52,6 +54,7 @@ end
 -- src: { species, kind, key, level, axePower, alive }. Returns the cutting,
 -- or nil and the reason.
 function Core.TakeCutting(st, src)
+    if src.species == Primelet.SPECIES then return nil, "You will not take a cutting from a minor miracle. Alt+G picks it up" end
     local ok, why = Rules.CanCut(src)
     if not ok then return nil, why end
     if #st.cuttings >= Rules.SATCHEL_SIZE then
@@ -67,25 +70,32 @@ function Core.TakeCutting(st, src)
     return c
 end
 
--- host: { species, kind, key, planted, stage, tier, x, y, z, bonus }.
+-- host: { species, kind, key, planted, stage, tier, x, y, z, bonus, world }.
 -- Returns the graft, or nil and the reason.
 function Core.Graft(st, host, level)
     local existing = Core.GraftOn(st, host)
     if existing then
         if existing.state == "pending" then return nil, "Already grafted. Come back after dawn" end
-        return nil, "This is already a " .. Rules.HybridName(existing.scion, existing.host)
+        local c = Core.Selected(st)
+        local why = "This is already a " .. Rules.PlantsName(existing.plants)
+        if c and not c.primelet and Rules.MaxPlants(level) > #existing.plants then
+            local ok, refuse = Rules.CanAddTo(existing.plants, c.species, host, level)
+            if not ok then why = refuse end
+        end
+        return nil, why
     end
     local c = Core.Selected(st)
     if not c then return nil, "Your satchel is empty. Take a cutting first" end
+    if c.primelet then return nil, "Set the Primelet down first (G on open ground)" end
     local ok, why = Rules.CanGraft(c.species, host, level)
     if not ok then return nil, why end
     table.remove(st.cuttings, st.selected)
     if st.selected > #st.cuttings then st.selected = math.max(1, #st.cuttings) end
-    local g = {
-        id = "g" .. st.nextId, kind = host.kind, host = host.species, scion = c.species,
+    local g = Store.SetPlants({
+        id = "g" .. st.nextId, kind = host.kind,
         state = "pending", made = st.dawn, x = host.x, y = host.y, z = host.z,
-        key = host.key, tier = host.tier, bonus = host.bonus,
-    }
+        key = host.key, tier = host.tier, bonus = host.bonus, world = host.world,
+    }, { host.species, c.species })
     st.nextId = st.nextId + 1
     st.grafts[#st.grafts + 1] = g
     return g
@@ -98,11 +108,22 @@ function Core.ChanceFor(st, g, level)
     return Rules.Chance(g.scion, { species = g.host, tier = g.tier }, level, g.bonus)
 end
 
+-- Cabbage onto cabbage: the graft that can become a Brassica Primelet.
+function Core.IsPrimeletGraft(g)
+    return #g.plants == 2 and g.host == "FPD_Cabbage" and g.scion == "FPD_Cabbage"
+end
+
+-- Where a primelet climbs out to: beside its plot.
+Core.PRIMELET_OFFSET = 90
+
 -- One dawn. rng(n) returns 1..n. alive(g) returns false when the host is
 -- known to be gone (harvested, felled, dug up), nil when unknown.
--- Returns outcomes { graft, result = "takes"|"rejected"|"lost", chance }
--- and the cuttings that wilted.
-function Core.Dawn(st, level, rng, alive)
+-- opts: { primeletChance (percent), forcePrimelet }.
+-- Returns outcomes { graft, result = "takes"|"rejected"|"lost"|"primelet",
+-- chance, primelet }, the cuttings that wilted and the primelets that grew
+-- a stage.
+function Core.Dawn(st, level, rng, alive, opts)
+    opts = opts or {}
     st.dawn = st.dawn + 1
     local outcomes = {}
     local keep = {}
@@ -113,10 +134,16 @@ function Core.Dawn(st, level, rng, alive)
             else
                 local chance = Core.ChanceFor(st, g, level)
                 if rng(100) <= chance then
-                    g.state = "hybrid"
                     st.firstTaken = true
-                    keep[#keep + 1] = g
-                    outcomes[#outcomes + 1] = { graft = g, result = "takes", chance = chance }
+                    local primeChance = opts.primeletChance or Rules.PRIMELET.chance
+                    if Core.IsPrimeletGraft(g) and (opts.forcePrimelet or Primelet.Roll(rng, primeChance)) then
+                        local p = Primelet.New(st, (g.x or 0) + Core.PRIMELET_OFFSET, g.y or 0, g.z or 0, g.world)
+                        outcomes[#outcomes + 1] = { graft = g, result = "primelet", chance = chance, primelet = p }
+                    else
+                        g.state = "hybrid"
+                        keep[#keep + 1] = g
+                        outcomes[#outcomes + 1] = { graft = g, result = "takes", chance = chance }
+                    end
                 else
                     outcomes[#outcomes + 1] = { graft = g, result = "rejected", chance = chance }
                 end
@@ -128,14 +155,14 @@ function Core.Dawn(st, level, rng, alive)
     st.grafts = keep
     local wilted, fresh = {}, {}
     for _, c in ipairs(st.cuttings) do
-        if st.dawn - (c.taken or 0) >= Rules.WILT_DAWNS then wilted[#wilted + 1] = c else fresh[#fresh + 1] = c end
+        if not c.primelet and st.dawn - (c.taken or 0) >= Rules.WILT_DAWNS then wilted[#wilted + 1] = c else fresh[#fresh + 1] = c end
     end
     st.cuttings = fresh
     if st.selected > #fresh then st.selected = math.max(1, #fresh) end
     for k, d in pairs(st.sources) do
         if d ~= st.dawn then st.sources[k] = nil end
     end
-    return outcomes, wilted
+    return outcomes, wilted, Primelet.Dawn(st)
 end
 
 -- Tree and sapling hybrids give once per in-game day.

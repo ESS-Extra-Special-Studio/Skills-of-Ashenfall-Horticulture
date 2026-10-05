@@ -26,6 +26,29 @@ Rules.XP = {
     discovery = 50,
     flagship = 200,
     pick = 25,
+    primelet = 200,
+    primeletStage = 30,
+    tend = 5,
+}
+
+-- A hybrid is an ordered list of plants: the host first, then each cutting
+-- grafted onto it. v1 stops at two; the 1-99 plan's Triple Graft (level 50)
+-- raises it to three, with no change to the save.
+Rules.MAX_PLANTS = 2
+Rules.TRIPLE_LEVEL = 50
+
+function Rules.MaxPlants(level)
+    if Rules.MAX_LEVEL >= Rules.TRIPLE_LEVEL and (level or 1) >= Rules.TRIPLE_LEVEL then return 3 end
+    return Rules.MAX_PLANTS
+end
+
+-- Same-species grafts that are allowed. Cabbage onto cabbage is how a
+-- Brassica Primelet happens.
+Rules.SELF_GRAFTS = { FPD_Cabbage = true }
+
+Rules.PRIMELET = {
+    id = "BrassicaPrimelet", name = "Brassica Primelet",
+    chance = 1.5, -- percent of cabbage-on-cabbage grafts that take
 }
 
 -- Trees. band: Horticulture level at which the species may be cut and used
@@ -147,7 +170,20 @@ Rules.FLAGSHIPS = {
 Rules.FLAGSHIP_TOTAL = 8
 Rules.REQUIRED_TOTAL = 5
 
+-- Named hybrids that are not flagships.
+Rules.NAMES = {
+    ["FPD_Cabbage>FPD_Cabbage"] = "Doubled Cabbage",
+}
+
 function Rules.ComboKey(scion, host) return tostring(scion) .. ">" .. tostring(host) end
+
+-- Key for an ordered plant list { host, scion1, scion2, ... }: the newest
+-- cutting first, the host last, so a pair gives the same key as ComboKey.
+function Rules.PlantsKey(plants)
+    local parts = {}
+    for i = #plants, 1, -1 do parts[#parts + 1] = tostring(plants[i]) end
+    return table.concat(parts, ">")
+end
 
 function Rules.Flagship(scion, host)
     return Rules.FLAGSHIPS[Rules.ComboKey(scion, host)]
@@ -164,7 +200,17 @@ end
 function Rules.HybridName(scion, host)
     local f = Rules.Flagship(scion, host)
     if f then return f.name end
+    local named = Rules.NAMES[Rules.ComboKey(scion, host)]
+    if named then return named end
     return Rules.Name(scion) .. "-" .. Rules.Name(host)
+end
+
+-- Display name for an ordered plant list; pairs use HybridName.
+function Rules.PlantsName(plants)
+    if #plants == 2 then return Rules.HybridName(plants[2], plants[1]) end
+    local names = {}
+    for i = #plants, 1, -1 do names[#names + 1] = Rules.Name(plants[i]) end
+    return table.concat(names, "-")
 end
 
 -- Catalogue id for a combination: flagships by id, others by species.
@@ -223,7 +269,7 @@ function Rules.CanGraft(scion, host, level)
     else
         return false, "That cannot take a graft"
     end
-    if scion == host.species then return false, "That is just more " .. sName:lower() end
+    if scion == host.species and not Rules.SELF_GRAFTS[scion] then return false, "That is just more " .. sName:lower() end
     local band = Rules.Band(host.species)
     if not band then return false, hName .. " is beyond Horticulture " .. Rules.MAX_LEVEL .. " as a host" end
     if level < band then return false, string.format("%s hosts need Horticulture %d", hName, band) end
@@ -232,6 +278,20 @@ function Rules.CanGraft(scion, host, level)
         return false, string.format("%s needs Horticulture %d", f.name, f.level)
     end
     return true
+end
+
+-- Can one more cutting go onto an existing hybrid? plants: its ordered list.
+-- The pair rules still hold against the host (a tree cutting never goes
+-- onto a crop), no plant appears twice, and the list stops at MaxPlants.
+function Rules.CanAddTo(plants, scion, host, level)
+    if #plants >= Rules.MaxPlants(level) then
+        if Rules.MaxPlants(level) < 3 then return false, "A third graft is beyond Horticulture " .. Rules.MAX_LEVEL end
+        return false, "It cannot take another graft"
+    end
+    for _, p in ipairs(plants) do
+        if p == scion then return false, "It already carries " .. Rules.Name(scion):lower() end
+    end
+    return Rules.CanGraft(scion, { species = plants[1], kind = host.kind, planted = host.planted, stage = host.stage }, level)
 end
 
 -- Chance in percent that a graft takes. host.tier: plot tier (plots) or the

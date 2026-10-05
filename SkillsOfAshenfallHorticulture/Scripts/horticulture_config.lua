@@ -15,6 +15,8 @@ local FIELDS = {
       help = "Key that shows or hides the Horticulture status line and Discovery Catalogue (a UE4SS key name, such as END or NUM_ONE). Shift and this key rereads the Observances." },
     { key = "action_key", default = "G", kind = "key",
       help = "Splicing key. Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto it when it can take it, otherwise takes a cutting. Alt and this key always takes a cutting; Shift and this key picks the next cutting in your satchel." },
+    { key = "primelet_chance", default = "1.5", kind = "number", min = 0, max = 100,
+      help = "Percent chance that a cabbage grafted onto a cabbage, once it takes, becomes something else entirely. 0 turns it off." },
     { key = "quiet", default = "false", kind = "bool",
       help = "true hides Horticulture's own cards (cuttings, grafts, Discovery Catalogue entries, the reminder after reading the book). XP and level-up notifications still show." },
     { key = "debug", default = "false", kind = "bool",
@@ -69,10 +71,15 @@ function Config.Load(dir, log)
         elseif field.kind == "key" then
             local name = (v and v ~= "") and v:upper() or field.default
             if Key and Key[name] ~= nil then value = name end
+        elseif field.kind == "number" then
+            local n = tonumber((v and v ~= "") and v or field.default)
+            if n and n >= field.min and n <= field.max then value = n end
         end
         if value == nil then
             if log then log("config.txt: " .. field.key .. " = " .. tostring(v) .. " is not understood; using " .. field.default) end
-            if field.kind == "bool" then value = field.default == "true" else value = field.default end
+            if field.kind == "bool" then value = field.default == "true"
+            elseif field.kind == "number" then value = tonumber(field.default)
+            else value = field.default end
         end
         out[field.key] = value
     end

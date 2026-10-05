@@ -1,11 +1,15 @@
 -- The character's splicing state: the cutting satchel, grafts in the world,
--- the dawn counter and which plants gave a cutting today. One text file per
--- character beside the ESL progress file,
+-- Brassica Primelets, the dawn counter and which plants gave a cutting
+-- today. One text file per character beside the ESL progress file,
 -- Saved\ESLDragonWilds\<character>.Horticulture.splicing.txt. Discoveries
 -- live in the ESL save itself (Award ids "hybrid:<id>").
+--
+-- A graft keeps its plants as an ordered list, host first ("Ash>FPD_Potato"),
+-- so a third graft adds to the list. Version 1 files kept a host and a
+-- scion field; they are read into the list.
 local Store = {}
 
-Store.VERSION = 1
+Store.VERSION = 2
 
 function Store.New()
     return {
@@ -16,7 +20,17 @@ function Store.New()
         cuttings = {},
         grafts = {},
         sources = {},
+        primelets = {},
     }
+end
+
+-- Sets a graft's plant list and the host and scion it is known by: the
+-- first plant, and the newest cutting.
+function Store.SetPlants(g, plants)
+    g.plants = plants
+    g.host = plants[1]
+    g.scion = plants[#plants]
+    return g
 end
 
 local function clean(s)
@@ -27,7 +41,23 @@ local function num(s)
     return tonumber(s)
 end
 
-local GRAFT_FIELDS = { "id", "kind", "host", "scion", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus" }
+local V1_FIELDS = { "id", "kind", "host", "scion", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus" }
+local GRAFT_FIELDS = { "id", "kind", "plants", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus", "world" }
+local NUMERIC = { made = true, lastPick = true, x = true, y = true, z = true, tier = true, bonus = true }
+local PRIMELET_FIELDS = { "id", "stage", "growth", "tended", "born", "world", "x", "y", "z", "yaw", "carried" }
+local PRIMELET_NUMERIC = { stage = true, growth = true, tended = true, born = true, x = true, y = true, z = true, yaw = true }
+
+local function row(t, fields)
+    local parts = {}
+    for i, f in ipairs(fields) do
+        local v = t[f]
+        if f == "plants" then v = table.concat(t.plants or { t.host, t.scion }, ">")
+        elseif type(v) == "number" and (f == "x" or f == "y" or f == "z" or f == "yaw") then v = string.format("%.0f", v)
+        elseif type(v) == "boolean" then v = v and "1" or "0" end
+        parts[i] = clean(v == nil and "" or v)
+    end
+    return table.concat(parts, "|")
+end
 
 function Store.Serialize(st)
     local lines = {
@@ -39,16 +69,13 @@ function Store.Serialize(st)
         "firsttaken=" .. (st.firstTaken and "1" or "0"),
     }
     for _, c in ipairs(st.cuttings) do
-        lines[#lines + 1] = "cut=" .. clean(c.species) .. "|" .. c.taken
+        lines[#lines + 1] = "cut=" .. clean(c.species) .. "|" .. c.taken .. (c.primelet and ("|" .. clean(c.primelet)) or "")
     end
     for _, g in ipairs(st.grafts) do
-        local parts = {}
-        for i, f in ipairs(GRAFT_FIELDS) do
-            local v = g[f]
-            if type(v) == "number" and (f == "x" or f == "y" or f == "z") then v = string.format("%.0f", v) end
-            parts[i] = clean(v == nil and "" or v)
-        end
-        lines[#lines + 1] = "graft=" .. table.concat(parts, "|")
+        lines[#lines + 1] = "graft=" .. row(g, GRAFT_FIELDS)
+    end
+    for _, p in ipairs(st.primelets or {}) do
+        lines[#lines + 1] = "primelet=" .. row(p, PRIMELET_FIELDS)
     end
     local keys = {}
     for k in pairs(st.sources) do keys[#keys + 1] = k end
@@ -59,35 +86,56 @@ function Store.Serialize(st)
     return table.concat(lines, "\n") .. "\n"
 end
 
-local function split(s)
+local function split(s, sep)
+    sep = sep or "|"
     local out = {}
-    for part in (s .. "|"):gmatch("([^|]*)|") do out[#out + 1] = part end
+    for part in (s .. sep):gmatch("([^" .. sep .. "]*)" .. sep) do out[#out + 1] = part end
     return out
+end
+
+local function read_row(v, fields, numeric)
+    local p = split(v)
+    local t = {}
+    for i, f in ipairs(fields) do
+        local raw = p[i]
+        if raw == "" then raw = nil end
+        if raw and numeric[f] then raw = num(raw) end
+        t[f] = raw
+    end
+    return t
 end
 
 function Store.Parse(text)
     local st = Store.New()
+    local version = 1
     for line in (text or ""):gmatch("[^\r\n]+") do
         local k, v = line:match("^(%w+)=(.*)$")
-        if k == "dawn" then st.dawn = num(v) or 0
+        if k == "version" then version = num(v) or 1
+        elseif k == "dawn" then st.dawn = num(v) or 0
         elseif k == "selected" then st.selected = num(v) or 1
         elseif k == "nextid" then st.nextId = num(v) or 1
         elseif k == "firsttaken" then st.firstTaken = v == "1"
         elseif k == "cut" then
             local p = split(v)
-            if p[1] ~= "" then st.cuttings[#st.cuttings + 1] = { species = p[1], taken = num(p[2]) or 0 } end
-        elseif k == "graft" then
-            local p = split(v)
-            local g = {}
-            for i, f in ipairs(GRAFT_FIELDS) do
-                local raw = p[i]
-                if raw == "" then raw = nil end
-                if raw and (f == "made" or f == "lastPick" or f == "x" or f == "y" or f == "z" or f == "tier" or f == "bonus") then
-                    raw = num(raw)
-                end
-                g[f] = raw
+            if p[1] ~= "" then
+                st.cuttings[#st.cuttings + 1] = { species = p[1], taken = num(p[2]) or 0, primelet = (p[3] ~= "" and p[3]) or nil }
             end
-            if g.id and g.host and g.scion then st.grafts[#st.grafts + 1] = g end
+        elseif k == "graft" then
+            local g
+            if version < 2 then
+                g = read_row(v, V1_FIELDS, NUMERIC)
+                if g.host and g.scion then Store.SetPlants(g, { g.host, g.scion }) end
+            else
+                g = read_row(v, GRAFT_FIELDS, NUMERIC)
+                if g.plants then Store.SetPlants(g, split(g.plants, ">")) end
+            end
+            if g.id and g.plants and #g.plants >= 2 then st.grafts[#st.grafts + 1] = g end
+        elseif k == "primelet" then
+            local p = read_row(v, PRIMELET_FIELDS, PRIMELET_NUMERIC)
+            p.carried = p.carried == "1"
+            p.stage, p.growth, p.tended = p.stage or 1, p.growth or 0, p.tended or -1
+            p.world = p.world or "?"
+            if p.id then st.primelets[#st.primelets + 1] = p end
         elseif k == "src" then
             local p = split(v)
             if p[1] ~= "" then st.sources[p[1]] = num(p[2]) end

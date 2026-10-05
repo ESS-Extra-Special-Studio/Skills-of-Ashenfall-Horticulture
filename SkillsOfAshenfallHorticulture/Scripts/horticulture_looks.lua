@@ -6,6 +6,11 @@
 -- used instead of the kitbash. meshes.txt beside the Scripts folder can point
 -- a hybrid at another path ("TuberwoodAsh = /Game/Mods/.../SM_Name").
 --
+-- Per-hybrid placement data replaces the built-in layout: a list of
+-- { asset path, transform relative to the host's base and facing } given to
+-- Looks.SetAttachments, or read from looks\<HybridId>.txt beside the Scripts
+-- folder (format at Looks.ParseAttachments).
+--
 -- Everything spawned here is local to this machine and never saved by the
 -- game: the looks are rebuilt from the splicing save whenever the host is
 -- near.
@@ -33,6 +38,7 @@ Looks.MESH = {
     willowCanopy = asset(TREES .. "Willow/Willow_01_Components/SM_Willow_01_Canopy"),
     oakCanopy = asset(TREES .. "Oak_Tree/FH_OakTree_01_Components/SM_FH_Oak_Tree_01_Canopy"),
     ashSapling = asset(TREES .. "Ash_Tree/SM_Ash_Sapling_01"),
+    goldIngot = asset(ITEM .. "Ingots/SM_Ingot_Gold_01"),
 }
 
 -- Cooked hybrid meshes, when the asset pak is installed. "Additions" meshes
@@ -44,6 +50,7 @@ Looks.PACKAGED = {
     Brassitato = asset(MOD_ART .. "Brassitato/SM_Brassitato_Additions_01"),
     SheafAsh = asset(MOD_ART .. "SheafAsh/SM_SheafAsh_Additions_01"),
     WeepingOak = asset(MOD_ART .. "WeepingOak/SM_WeepingOak_Additions_01"),
+    BrassicaPrimelet = asset(MOD_ART .. "BrassicaPrimelet/SM_BrassicaPrimelet_01"),
 }
 
 -- Scion meshes for ordinary combinations: a few small pieces of the scion.
@@ -154,6 +161,73 @@ function Looks.Layout(hybridId, scion, hostKind, size)
     return out, 1.08
 end
 
+-- A hybrid of more than two plants wears every cutting's layout at once.
+-- plants: { host, scion1, scion2, ... }; idFor(scion, host) names each pair.
+function Looks.LayoutPlants(plants, idFor, hostKind, size)
+    local out, hostScale = {}, 1.0
+    for i = 2, #plants do
+        local pieces, s = Looks.Layout(idFor(plants[i], plants[1]), plants[i], hostKind, size)
+        for _, p in ipairs(pieces) do out[#out + 1] = p end
+        if s > hostScale then hostScale = s end
+    end
+    return out, hostScale
+end
+
+-- Placement data: one attachment per line,
+--   <asset path> | x y z | pitch yaw roll | scale   (or sx sy sz)
+-- x y z in cm from the host's base, turned with the host; rotation in
+-- degrees on top of the host's facing. Only the path is required.
+function Looks.ParseAttachments(text)
+    local out = {}
+    for line in (text or ""):gmatch("[^\r\n]+") do
+        if not line:match("^%s*#") and line:match("%S") then
+            local fields = {}
+            for f in (line .. "|"):gmatch("([^|]*)|") do fields[#fields + 1] = f end
+            local path = (fields[1] or ""):match("^%s*(.-)%s*$")
+            local function nums(s)
+                local t = {}
+                for n in (s or ""):gmatch("[-%d%.eE+]+") do t[#t + 1] = tonumber(n) end
+                return t
+            end
+            local loc, rot, sc = nums(fields[2]), nums(fields[3]), nums(fields[4])
+            if path ~= "" then
+                if not path:find(".", 1, true) then path = asset(path) end
+                out[#out + 1] = {
+                    path = path, x = loc[1] or 0, y = loc[2] or 0, z = loc[3] or 0,
+                    pitch = rot[1] or 0, yaw = rot[2] or 0, roll = rot[3] or 0,
+                    scale = sc[1] or 1, scaleY = sc[2], scaleZ = sc[3],
+                }
+            end
+        end
+    end
+    return out
+end
+
+-- Attachments as pieces, scaled with the host actor (placed trees vary).
+function Looks.AttachmentPieces(list, hostScale)
+    local s = hostScale or 1
+    local out = {}
+    for _, a in ipairs(list) do
+        out[#out + 1] = {
+            path = a.path, x = a.x * s, y = a.y * s, z = a.z * s,
+            pitch = a.pitch, yaw = a.yaw, roll = a.roll,
+            scale = a.scale * s, scaleY = a.scaleY and a.scaleY * s, scaleZ = a.scaleZ and a.scaleZ * s,
+        }
+    end
+    return out
+end
+
+-- The Brassica Primelet: a vanilla cabbage, tinted, with a crown of gold
+-- ingots stood on end. Placeholder for a pipeline model (Looks.PACKAGED).
+Looks.PRIMELET_TINT = { hue = 0.12, color = { R = 0.75, G = 0.85, B = 0.35 } }
+
+function Looks.PrimeletLayout(scale)
+    local s = scale or 1
+    local out = { { mesh = "cabbage", x = 0, y = 0, z = 0, scale = 2.2 * s, yaw = 0, pitch = 0, roll = 0, tint = Looks.PRIMELET_TINT } }
+    ring(out, "goldIngot", 5, 9 * s, 26 * s, 0.35 * s, { pitch = 90 })
+    return out
+end
+
 -- Pending grafts show a binding of flax twine at the graft point.
 function Looks.PendingLayout(hostKind, size)
     local z = hostKind == "tree" and math.min(size.height * 0.12, 120) or math.max(size.height * 0.3, 10)
@@ -185,6 +259,33 @@ local meshCache = {}
 local packagedSeen = {}
 local overrides = {}
 local built = {}
+local attachments = {}
+local looksDir = nil
+
+-- Placement data for a hybrid: a list of { path, x, y, z, pitch, yaw, roll,
+-- scale [, scaleY, scaleZ] }, or nil to go back to the built-in layout.
+function Looks.SetAttachments(hybridId, list)
+    attachments[hybridId] = list or false
+    for id, b in pairs(built) do
+        if b.hybridId == hybridId then Looks.Clear(id) end
+    end
+end
+
+function Looks.Attachments(hybridId)
+    if attachments[hybridId] == nil then
+        attachments[hybridId] = false
+        local f = looksDir and io.open(looksDir .. "\\" .. hybridId .. ".txt", "r")
+        if f then
+            local list = Looks.ParseAttachments(f:read("*a"))
+            f:close()
+            if #list > 0 then
+                attachments[hybridId] = list
+                if U then U.log(string.format("%s: %d attachment(s) from looks\\%s.txt", hybridId, #list, hybridId)) end
+            end
+        end
+    end
+    return attachments[hybridId] or nil
+end
 
 local function load(path)
     if meshCache[path] ~= nil then return meshCache[path] or nil end
@@ -204,6 +305,7 @@ end
 function Looks.Init(util, dir)
     U = util
     UEHelpers = require("UEHelpers")
+    looksDir = dir .. "\\..\\looks"
     local f = io.open(dir .. "\\..\\meshes.txt", "r")
     if f then
         overrides = Looks.ParseOverrides(f:read("*a"))
@@ -243,7 +345,8 @@ local function spawn(world, mesh, loc, rot, scale)
         comp:SetCollisionEnabled(0)
     end)
     pcall(function() actor:SetActorEnableCollision(false) end)
-    pcall(function() actor:SetActorScale3D({ X = scale, Y = scale, Z = scale }) end)
+    local s = type(scale) == "table" and scale or { X = scale, Y = scale, Z = scale }
+    pcall(function() actor:SetActorScale3D(s) end)
     return actor
 end
 
@@ -283,7 +386,7 @@ end
 -- Tints every material on the host's meshes (parameters the material lacks
 -- are ignored by the engine) and keeps the originals to put back.
 local function tint(comps, scion)
-    local t = Looks.Tint(scion)
+    local t = type(scion) == "table" and scion or Looks.Tint(scion)
     local saved = {}
     for _, comp in ipairs(comps) do
         local n = 0
@@ -348,6 +451,28 @@ function Looks.Built(graftId) return built[graftId] end
 -- Builds the look for graft g on host h = { actor, kind, loc, comps }
 -- (comps: the meshes to tint and scale; plots pass the plant mesh).
 -- mode: "pending" or "hybrid". Returns the number of pieces placed.
+-- Spawns pieces around base, turned by yaw, into b.actors. A piece names a
+-- Looks.MESH entry (mesh) or an asset path (path); tint recolours it.
+local function place(world, b, base, yaw, pieces)
+    for _, p in ipairs(pieces) do
+        local path = p.path or Looks.MESH[p.mesh]
+        local mesh = path and load(path)
+        if mesh then
+            local x, y = rotate(p.x or 0, p.y or 0, yaw)
+            local scale = p.scale or 1
+            if p.scaleY or p.scaleZ then scale = { X = scale, Y = p.scaleY or scale, Z = p.scaleZ or scale } end
+            local a = spawn(world, mesh, { X = base.X + x, Y = base.Y + y, Z = base.Z + (p.z or 0) },
+                { Pitch = p.pitch or 0, Yaw = (p.yaw or 0) + yaw, Roll = p.roll or 0 }, scale)
+            if a then
+                b.actors[#b.actors + 1] = a
+                if p.tint then tint(mesh_components(a), p.tint) end
+            end
+        else
+            U.log_once("mesh" .. tostring(path), "Hybrid look: mesh " .. tostring(path) .. " could not be loaded")
+        end
+    end
+end
+
 function Looks.Apply(g, h, mode, hybridId)
     local b = built[g.id]
     local hostName = U.full(h.actor)
@@ -360,34 +485,54 @@ function Looks.Apply(g, h, mode, hybridId)
     local yaw = 0
     pcall(function() yaw = h.actor:K2_GetActorRotation().Yaw end)
     local size = h.size or Looks.Size(h.actor, h.kind)
-    b = { host = hostName, mode = mode, actors = {}, count = 0 }
+    b = { host = hostName, mode = mode, actors = {}, count = 0, hybridId = hybridId }
     built[g.id] = b
     local pieces, hostScale = nil, 1.0
     local packaged = mode == "hybrid" and Looks.Packaged(hybridId) or nil
+    local attached = mode == "hybrid" and not packaged and Looks.Attachments(hybridId) or nil
     if packaged then
         local a = spawn(world, packaged, base, { Pitch = 0, Yaw = yaw, Roll = 0 }, 1.0)
         if a then b.actors[#b.actors + 1] = a end
         pieces = {}
+    elseif attached then
+        local actorScale = 1
+        pcall(function() actorScale = h.actor:GetActorScale3D().Z end)
+        pieces = Looks.AttachmentPieces(attached, actorScale)
     elseif mode == "pending" then
         pieces = Looks.PendingLayout(h.kind, size)
+    elseif g.plants and #g.plants > 2 then
+        local Rules = require("horticulture_splice_rules")
+        pieces, hostScale = Looks.LayoutPlants(g.plants, Rules.HybridId, h.kind, size)
     else
         pieces, hostScale = Looks.Layout(hybridId, g.scion, h.kind, size)
     end
-    for _, p in ipairs(pieces) do
-        local mesh = load(Looks.MESH[p.mesh])
-        if mesh then
-            local x, y = rotate(p.x, p.y, yaw)
-            local a = spawn(world, mesh, { X = base.X + x, Y = base.Y + y, Z = base.Z + p.z },
-                { Pitch = p.pitch or 0, Yaw = (p.yaw or 0) + yaw, Roll = p.roll or 0 }, p.scale)
-            if a then b.actors[#b.actors + 1] = a end
-        else
-            U.log_once("mesh" .. p.mesh, "Hybrid look: mesh " .. tostring(Looks.MESH[p.mesh]) .. " could not be loaded")
-        end
-    end
+    place(world, b, base, yaw, pieces)
     if mode == "hybrid" then
         local comps = h.comps or mesh_components(h.actor)
         if not Looks.NO_TINT[hybridId] then b.tinted = tint(comps, g.scion) end
         if hostScale ~= 1.0 then b.scaled = scale_comps(comps, hostScale) end
+    end
+    b.count = #b.actors
+    return b.count
+end
+
+-- A Brassica Primelet at loc, facing yaw, at its stage's scale. Rebuilt
+-- only when it moves or grows.
+function Looks.ApplyPrimelet(id, loc, yaw, scale)
+    local sig = string.format("%.0f,%.0f,%.0f,%.0f,%.2f", loc.X, loc.Y, loc.Z, yaw or 0, scale or 1)
+    local b = built[id]
+    if b and b.host == sig and b.count > 0 and U.valid(b.actors[1]) then return b.count end
+    Looks.Clear(id)
+    local world = UEHelpers.GetWorld()
+    if not U.valid(world) then return 0 end
+    b = { host = sig, mode = "primelet", actors = {}, count = 0 }
+    built[id] = b
+    local packaged = Looks.Packaged("BrassicaPrimelet")
+    if packaged then
+        local a = spawn(world, packaged, loc, { Pitch = 0, Yaw = yaw or 0, Roll = 0 }, scale or 1)
+        if a then b.actors[#b.actors + 1] = a end
+    else
+        place(world, b, loc, yaw or 0, Looks.PrimeletLayout(scale))
     end
     b.count = #b.actors
     return b.count

@@ -101,8 +101,40 @@ r = cangraft("FPD_Cabbage", t(species="FPD_Potato", kind="plot", stage=1), 5)
 check("cabbage onto a growing potato plot", r.startswith("true"), r)
 r = cangraft("FPD_Cabbage", t(species="FPD_Potato", kind="plot", stage=2), 5)
 check("not onto a harvestable crop", r.startswith("false"), r)
-r = cangraft("FPD_Cabbage", t(species="FPD_Cabbage", kind="plot", stage=1), 5)
+r = cangraft("FPD_Potato", t(species="FPD_Potato", kind="plot", stage=1), 5)
 check("same species is not a hybrid", r.startswith("false") and "just more" in r, r)
+r = cangraft("FPD_Cabbage", t(species="FPD_Cabbage", kind="plot", stage=1), 1)
+check("cabbage onto cabbage is allowed (the Primelet graft)", r.startswith("true"), r)
+check("cabbage onto cabbage is a Doubled Cabbage", R.HybridName("FPD_Cabbage", "FPD_Cabbage") == "Doubled Cabbage")
+
+plants = L.eval(r"""function()
+    local R = require("horticulture_splice_rules")
+    local out = {}
+    out[#out + 1] = R.PlantsKey({ "Ash", "FPD_Potato" })
+    out[#out + 1] = R.PlantsKey({ "Ash", "FPD_Potato", "FPD_Cabbage" })
+    out[#out + 1] = R.PlantsName({ "Ash", "FPD_Potato" })
+    out[#out + 1] = R.PlantsName({ "Ash", "FPD_Potato", "FPD_Cabbage" })
+    local tree = { kind = "tree", planted = true }
+    local plot = { kind = "plot", stage = 1 }
+    local function can(p, s, h, lv) local ok, why = R.CanAddTo(p, s, h, lv) return tostring(ok) .. "|" .. tostring(why) end
+    out[#out + 1] = can({ "Ash", "FPD_Potato" }, "FPD_Cabbage", tree, 25)
+    R.MAX_LEVEL = 99
+    out[#out + 1] = tostring(R.MaxPlants(49)) .. tostring(R.MaxPlants(50))
+    out[#out + 1] = can({ "Ash", "FPD_Potato" }, "FPD_Cabbage", tree, 50)
+    out[#out + 1] = can({ "FPD_Potato", "FPD_Cabbage" }, "Oak", plot, 50)
+    out[#out + 1] = can({ "Ash", "FPD_Potato" }, "FPD_Potato", tree, 50)
+    out[#out + 1] = can({ "Ash", "FPD_Potato", "FPD_Cabbage" }, "FPD_Wheat", tree, 60)
+    R.MAX_LEVEL = 25
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("plant list key: newest cutting first, host last", plants[0] == "FPD_Potato>Ash" and plants[1] == "FPD_Cabbage>FPD_Potato>Ash", plants[:2])
+check("plant list names", plants[2] == "Tuberwood Ash" and plants[3] == "Cabbage-Potato-Ash", plants[2:4])
+check("v1: a third graft is beyond 25", plants[4].startswith("false") and "beyond" in plants[4], plants[4])
+check("Triple Graft opens at 50 in the 1-99 plan", plants[5] == "23", plants[5])
+check("triple: cabbage onto Tuberwood Ash", plants[6].startswith("true"), plants[6])
+check("triple: a tree cutting still never goes onto a crop", "cannot take on a crop" in plants[7], plants[7])
+check("triple: no plant twice", "already carries" in plants[8], plants[8])
+check("triple: three at most", plants[9].startswith("false"), plants[9])
 r = cangraft("FPD_Cabbage", t(species="Oak", kind="sapling", planted=True), 7)
 check("oak host needs 8", r.startswith("false") and "8" in r, r)
 r = cangraft("Ash", t(species="Oak", kind="tree", planted=True), 8)
@@ -142,6 +174,51 @@ got = roundtrip(os.path.join(TMP, "store.txt"))
 check("store round trip", got == "4 true 3 2 FPD_Potato 2 2 Ash 4 100 plot:77 4 nil", got)
 missing = L.eval("function(p) local s = require('horticulture_splice_store').Load(p) return s.dawn .. #s.cuttings end")(os.path.join(TMP, "none.txt"))
 check("missing file is a fresh satchel", missing == "00", missing)
+
+V1 = """# old
+version=1
+dawn=3
+selected=1
+nextid=4
+firsttaken=1
+cut=FPD_Potato|3
+graft=g2|tree|Ash|FPD_Potato|hybrid|2|3|100|200|0||||
+graft=g3|plot|FPD_Potato|FPD_Cabbage|pending|3||5|6|0|plot:7|1||
+"""
+with open(os.path.join(TMP, "v1.txt"), "w") as f:
+    f.write(V1)
+mig = L.eval(r"""function(path, out)
+    local Store = require("horticulture_splice_store")
+    local st = Store.Load(path)
+    local g1, g2 = st.grafts[1], st.grafts[2]
+    local a = string.format("%d %s %s %s %s %s %s %s", #st.grafts, table.concat(g1.plants, ">"), g1.host, g1.scion,
+        tostring(g1.lastPick), table.concat(g2.plants, ">"), g2.key, tostring(g2.tier))
+    Store.Save(out, st)
+    local text = io.open(out):read("*a")
+    local b = Store.Load(out)
+    return a .. "\n" .. (text:find("version=2", 1, true) and "v2" or "v?") .. " " .. table.concat(b.grafts[1].plants, ">")
+        .. " " .. b.grafts[2].host .. " " .. b.grafts[2].scion
+end""")(os.path.join(TMP, "v1.txt"), os.path.join(TMP, "v2.txt")).split("\n")
+check("version 1 save migrates to plant lists", mig[0] == "2 Ash>FPD_Potato Ash FPD_Potato 3 FPD_Potato>FPD_Cabbage plot:7 1", mig[0])
+check("migrated save is written as version 2 and reads back", mig[1] == "v2 Ash>FPD_Potato FPD_Potato FPD_Cabbage", mig[1])
+
+trip = L.eval(r"""function(path)
+    local Store = require("horticulture_splice_store")
+    local st = Store.New()
+    st.grafts = { Store.SetPlants({ id = "g9", kind = "tree", state = "hybrid", x = 1, y = 2, z = 3, world = "Aseroth" },
+        { "Ash", "FPD_Potato", "FPD_Cabbage" }) }
+    st.primelets = { { id = "p4", stage = 2, growth = 3, tended = 5, born = 1, world = "Aseroth", x = 10.4, y = 20, z = 30, yaw = 90, carried = false },
+                     { id = "p5", stage = 1, growth = 0, tended = -1, born = 2, world = "?", x = 0, y = 0, z = 0, yaw = 0, carried = true } }
+    st.cuttings = { { species = "Primelet", taken = 2, primelet = "p5" }, { species = "FPD_Cabbage", taken = 5 } }
+    Store.Save(path, st)
+    local b = Store.Load(path)
+    local g, p, q = b.grafts[1], b.primelets[1], b.primelets[2]
+    return string.format("%s %s %s %s|%s %d %d %d %s %s %s|%s %s|%s %s", table.concat(g.plants, ">"), g.host, g.scion, g.world,
+        p.id, p.stage, p.growth, p.tended, p.world, tostring(p.x), tostring(p.carried), q.id, tostring(q.carried),
+        tostring(b.cuttings[1].primelet), tostring(b.cuttings[2].primelet))
+end""")(os.path.join(TMP, "trip.txt"))
+check("three-plant hybrid, primelets and a carried primelet round-trip",
+      trip == "Ash>FPD_Potato>FPD_Cabbage Ash FPD_Cabbage Aseroth|p4 2 3 5 Aseroth 10 false|p5 true|p5 nil", trip)
 
 # Core: the Tuberwood Ash loop ---------------------------------------------
 flow = L.eval(r"""function()
@@ -226,6 +303,83 @@ check("cuttings wilt after two dawns", lines[3] == "after2 0", lines[3])
 check("a later graft can be rejected", lines[4] == "rejected 60 grafts 0", lines[4])
 check("Brassitato harvest adds 2 cabbages", lines[5] == "harvest 1 2 Cabbage grafts 0", lines[5])
 check("host gone by dawn: graft lost", lines[6] == "lost", lines[6])
+
+# Brassica Primelet ---------------------------------------------------------
+prime = L.eval(r"""function()
+    local Core = require("horticulture_splice_core")
+    local P = require("horticulture_primelet")
+    local st = require("horticulture_splice_store").New()
+    local out = {}
+    local function say(...) out[#out + 1] = table.concat({ ... }, " ") end
+    say("roll", tostring(P.Roll(function() return 15 end, 1.5)), tostring(P.Roll(function() return 16 end, 1.5)),
+        tostring(P.Roll(function() return 1 end, 0)))
+    -- An ordinary take: a Doubled Cabbage.
+    st.firstTaken = true
+    Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "a", level = 1, alive = true })
+    Core.Graft(st, { species = "FPD_Cabbage", kind = "plot", key = "plot:1", stage = 1, tier = 1, x = 0, y = 0, z = 0, world = "W" }, 1)
+    local outs = Core.Dawn(st, 1, function(n) return n == 1000 and 500 or 1 end)
+    say("plain", outs[1].result, #st.grafts, #st.primelets)
+    -- Forced: the graft becomes a primelet beside the plot.
+    Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "b", level = 1, alive = true })
+    Core.Graft(st, { species = "FPD_Cabbage", kind = "plot", key = "plot:2", stage = 1, tier = 1, x = 500, y = 0, z = 7, world = "W" }, 1)
+    outs = Core.Dawn(st, 1, function() return 1 end, nil, { forcePrimelet = true })
+    local p = outs[1].primelet
+    say("forced", outs[1].result, #st.grafts, #st.primelets, p.x, p.y, p.z, p.world, P.Name(p))
+    -- Cabbage onto potato never becomes one.
+    Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "c", level = 5, alive = true })
+    Core.Graft(st, { species = "FPD_Potato", kind = "plot", key = "plot:3", stage = 1, tier = 1, x = 900, y = 0 }, 5)
+    outs = Core.Dawn(st, 5, function() return 1 end, nil, { forcePrimelet = true })
+    say("brassitato", outs[1].result)
+    -- Tending and growth.
+    local rng = function(n) return 1 end
+    local line, counted = P.Tend(st, p, rng)
+    say("tend", tostring(counted))
+    line, counted = P.Tend(st, p, rng)
+    say("again", tostring(counted), line:find("after dawn") and "after dawn" or line)
+    local _, _, grown = Core.Dawn(st, 1, rng)
+    say("day1", p.growth, p.stage, #grown)
+    Core.Dawn(st, 1, rng)
+    say("untended", p.growth, p.stage)
+    P.Tend(st, p, rng)
+    _, _, grown = Core.Dawn(st, 1, rng)
+    say("day2", p.growth, p.stage, #grown, P.Name(p))
+    for i = 1, 3 do P.Tend(st, p, rng) Core.Dawn(st, 1, rng) end
+    say("grown", p.growth, p.stage, P.Name(p))
+    P.Tend(st, p, rng) Core.Dawn(st, 1, rng)
+    say("cap", p.stage)
+    -- Near, pick up, keep through dawns, set down in another world.
+    local me = { X = 350, Y = 0 }
+    say("near", tostring(P.Near(st, me, 0, "W") == p), tostring(P.Near(st, me, 180, "W") == p), tostring(P.Near(st, me, 0, "Other") == nil))
+    local cutting = Core.TakeCutting(st, { species = "Primelet", kind = "crop", level = 25, alive = true })
+    say("cut", tostring(cutting))
+    local entry = P.PickUp(st, p, 6)
+    say("carried", tostring(p.carried), #P.Visible(st, "W"), Core.Selected(st).primelet)
+    Core.Dawn(st, 1, rng) Core.Dawn(st, 1, rng) Core.Dawn(st, 1, rng)
+    say("kept", #st.cuttings, Core.Selected(st).primelet)
+    local g, why = Core.Graft(st, { species = "Ash", kind = "tree", planted = true, x = 0, y = 0 }, 1)
+    say("nograft", why)
+    P.Place(st, entry, 1, 2, 3, 45, "Other")
+    say("placed", #st.cuttings, tostring(p.carried), p.world, #P.Visible(st, "W"), #P.Visible(st, "Other"))
+    say("status", P.StatusLine(st, "Other"))
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("primelet roll: 1.5% is 15 in 1000; 0 never", prime[0] == "roll true false false", prime[0])
+check("cabbage on cabbage usually makes a Doubled Cabbage", prime[1] == "plain takes 1 0", prime[1])
+check("a primelet climbs out beside the plot; the graft ends", prime[2] == "forced primelet 1 1 590 0 7 W Primelet Sprout", prime[2])
+check("only cabbage on cabbage can become a primelet", prime[3] == "brassitato takes", prime[3])
+check("tend once a day", prime[4] == "tend true" and prime[5] == "again false after dawn", prime[4:6])
+check("a tended day grows it", prime[6] == "day1 1 1 0", prime[6])
+check("an untended day does not", prime[7] == "untended 1 1", prime[7])
+check("two tended days: Brassica Primelet", prime[8] == "day2 2 2 1 Brassica Primelet", prime[8])
+check("five tended days: Prime-ling", prime[9] == "grown 5 3 Prime-ling", prime[9])
+check("Prime-ling is the last stage", prime[10] == "cap 3", prime[10])
+check("near: facing it, not turned away, not in another world", prime[11] == "near true false true", prime[11])
+check("no cutting from a primelet", prime[12] == "cut nil", prime[12])
+check("picked up into the satchel", prime[13].startswith("carried true 0 p"), prime[13])
+check("a carried primelet never wilts", prime[14].startswith("kept 1 p"), prime[14])
+check("a carried primelet is not grafted", "Set the Primelet down" in prime[15], prime[15])
+check("set down in another world", prime[16] == "placed 0 false Other 0 1", prime[16])
+check("status line", prime[17].startswith("status Prime-ling (fully grown, at home"), prime[17])
 
 # World helpers -------------------------------------------------------------
 W = L.eval('(require("horticulture_world"))')
@@ -316,6 +470,36 @@ check("layouts for the flagships", all(s in lay for s in ["TuberwoodAsh=12", "Br
 check("Brassitato crowns the potato with a cabbage", "Brassitato=1:cabbage" in lay, lay)
 check("Tuberwood potatoes sit at the roots", "tuberlow=true" in lay, lay)
 check("meshes.txt overrides", "/Game/Mods/X/SM_T.SM_T /Game/A/B.B" in lay, lay)
+att = L.eval(r"""function()
+    local Looks = require("horticulture_looks")
+    local out = {}
+    local list = Looks.ParseAttachments([[
+# Tuberwood Ash: potatoes hanging in the branches
+/Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01 | 120 -40 610 | 0 35 90 | 1.8
+/Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01.SM_Potato_Fruit_01 | 1 2 3 | | 1 2 3
+/Game/Art/X/SM_Bare
+]])
+    out[#out + 1] = #list .. " " .. list[1].path .. " " .. list[1].z .. " " .. list[1].yaw .. " " .. list[1].roll .. " " .. list[1].scale
+    out[#out + 1] = list[2].path .. " " .. list[2].scale .. list[2].scaleY .. list[2].scaleZ .. " " .. list[3].x .. list[3].scale
+    local pieces = Looks.AttachmentPieces(list, 2)
+    out[#out + 1] = pieces[1].x .. " " .. pieces[1].z .. " " .. pieces[1].scale .. " " .. pieces[2].scaleZ
+    local Rules = require("horticulture_splice_rules")
+    local tri = Looks.LayoutPlants({ "Ash", "FPD_Potato", "FPD_Wheat" }, Rules.HybridId, "tree", { height = 900, radius = 300 })
+    out[#out + 1] = "triple=" .. #tri
+    local pl = Looks.PrimeletLayout(1.5)
+    local bad, ingots = 0, 0
+    for _, p in ipairs(pl) do
+        if not Looks.MESH[p.mesh] then bad = bad + 1 end
+        if p.mesh == "goldIngot" then ingots = ingots + 1 end
+    end
+    out[#out + 1] = "primelet=" .. #pl .. " " .. pl[1].mesh .. " " .. tostring(pl[1].tint ~= nil) .. " ingots " .. ingots .. " bad " .. bad
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("attachment file: path, location, rotation, scale", att[0] == "3 /Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01.SM_Potato_Fruit_01 610 35 90 1.8", att[0])
+check("attachment file: full path, per-axis scale, path only", att[1] == "/Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01.SM_Potato_Fruit_01 123 01", att[1])
+check("attachments scale with the host actor", att[2] == "240 1220 3.6 6", att[2])
+check("a triple hybrid wears both layouts (Tuberwood 12 + Sheaf 12)", att[3] == "triple=24", att[3])
+check("primelet look: tinted cabbage and a crown of 5 gold ingots", att[4] == "primelet=6 cabbage true ingots 5 bad 0", att[4])
 check("packaged Tuberwood path", "/Game/Mods/SkillsOfAshenfallHorticulture/Art/Plants/TuberwoodAsh/SM_TuberwoodAsh_Additions_01.SM_TuberwoodAsh_Additions_01" in lay, lay)
 
 # The game glue, with a fake world -----------------------------------------
@@ -342,6 +526,7 @@ local Looks = require("horticulture_looks")
 Looks.Init = function() end
 Looks.Apply = function(g, h, mode, id) applied[#applied + 1] = g.id .. ":" .. mode .. ":" .. id return 3 end
 Looks.Clear = function(id) cleared[#cleared + 1] = id end
+Looks.ApplyPrimelet = function(id, loc, yaw, scale) applied[#applied + 1] = id .. ":" .. string.format("%.0f,%.0f,%.2f", loc.X, loc.Y, scale) return 6 end
 Looks.ClearAll = function() end
 local paid, order = {}, {}
 ESL = {
@@ -376,8 +561,8 @@ potato = g.plot("FPD_Potato", 1, 50)
 ash = g.tree("Ash", True, 300, "sapling")
 g.nearby = L.table_from([potato, ash])
 bound = sorted(str(k) for k in g.binds.keys())
-check("splicing keys are G, Alt+G, Shift+G; none on Ctrl (the game's Evade)",
-      bound == ["ALT+G", "G", "SHIFT+G"], bound)
+check("splicing keys are G, Alt+G, Shift+G and E (Primelet); none on Ctrl (the game's Evade)",
+      bound == ["ALT+G", "E", "G", "SHIFT+G"], bound)
 
 g.aimed = potato
 g.press("G")
@@ -501,6 +686,55 @@ check("a wild potato is not a host", "NO CUTTING|" in c and "GRAFT MADE" not in 
 g.aimed = ash
 g.press("G")
 check("wild potato cutting grafts onto a planted ash", "Graft made=20" in g.take("xp"))
+
+# Brassica Primelet in the world: graft, forced reveal, tend, carry, set down.
+os.remove(save)
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+g = L.globals()
+c1 = g.plot("FPD_Cabbage", 1, 2000)
+c2 = g.plot("FPD_Cabbage", 1, 50)
+g.nearby = L.table_from([c1, c2])
+g.aimed = c1
+g.press("G")
+g.aimed = c2
+g.press("G")
+x = g.take("xp")
+check("cabbage onto cabbage grafts", "Graft made=20" in x, x)
+g.take("cards")
+g.S.ForcePrimelet()
+g.S.Dawn("test")
+for _ in range(6):
+    g.tick()
+a = g.take("awards")
+c = g.take("cards")
+check("Primelet reveal: secret catalogue entry and XP", "hybrid:BrassicaPrimelet=200" in a, a)
+check("Primelet reveal cards in order", c.find("SOMETHING HAS HAPPENED|BRASSICA PRIMELET") >= 0
+      and c.find("SOMETHING HAS HAPPENED") < c.find("SECRET ENTRY: BRASSICA PRIMELET") < c.find("Brassica Primelet|The Observances"), c)
+ap = g.take("applied")
+check("Primelet drawn beside the plot", "prime:p" in ap and ":140,0,0.80" in ap, ap)
+check("catalogue lists the secret entry once found", "Brassica Primelet (secret)" in g.S.CatalogueLine(), g.S.CatalogueLine())
+g.aimed = None
+g.press("G")
+c = g.take("cards")
+check("G beside it tends it", "TENDED|Primelet Sprout|" in c and "Primelet tended=5" in g.take("xp"), c)
+g.binds["E"]()
+c = g.take("cards")
+check("E tends it too, once a day", "PRIMELET|Primelet Sprout|It has had all the attention" in c, c)
+g.press("ALT+G")
+c = g.take("cards")
+check("Alt+G picks it up", "PICKED UP|Primelet Sprout|" in c, c)
+check("satchel shows it", "Primelet Sprout*" in g.S.SatchelLine(), g.S.SatchelLine())
+check("status line says it is carried", "in your satchel" in g.S.PrimeletLine(), g.S.PrimeletLine())
+g.press("G")
+c = g.take("cards")
+check("G sets it down", "SET DOWN|Primelet Sprout|" in c, c)
+ap = g.take("applied")
+check("set down in front of the player", ":120,0,0.80" in ap, ap)
+L2 = fresh()
+L2.execute(GLUE, SCRIPTS, TMP)
+pl = L2.eval('(function() local st = require("horticulture_splicing").State() return #st.primelets .. " " .. tostring(st.primelets[1].carried) .. " " .. st.primelets[1].x end)()')
+check("restart keeps the Primelet where it was set down", pl == "1 false 120", pl)
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):

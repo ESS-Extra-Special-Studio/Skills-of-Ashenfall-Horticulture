@@ -42,7 +42,7 @@ Horticulture then appears in your skills menu and on the character select screen
 ## Splicing
 
 1. **Take a cutting.** Aim at a growing crop, a sapling or a tree and press **G**. The cutting goes into your satchel (six at most). One cutting per plant per day; a cutting wilts after two dawns.
-2. **Graft it.** Aim at a crop, sapling or tree **you planted** and press **G** again. Crop cuttings take on crops and on trees; tree cuttings take on trees, never on a crop. A plant cannot take a graft of its own kind.
+2. **Graft it.** Aim at a crop, sapling or tree **you planted** and press **G** again. Crop cuttings take on crops and on trees; tree cuttings take on trees, never on a crop. A plant cannot take a graft of its own kind, except cabbage, which the Brassicans thought worth trying.
 3. **Wait for dawn.** At 06:00 in game (sleeping through it counts) the graft takes or is rejected. Your first graft always takes; after that the chance is about 60%, better the further you are above the cutting's level and worse when a crop is grafted onto a weaker host.
 4. **The hybrid.** A graft that takes changes the plant you can see, and the first of each pairing enters your **Discovery Catalogue**.
 5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G). A hybrid crop adds the cutting's crop to its normal harvest. Felling a hybrid tree ends it, with a last handful.
@@ -73,6 +73,13 @@ Tree cuttings need a logging axe in your hand that could fell that tree, as the 
 
 Three more are waiting to be found, and every other pairing makes a hybrid of its own with a tint, a scale and a catalogue line.
 
+### Spoiler: the Brassica Primelet
+
+Very rarely (1.5% of the time, `primelet_chance`), a cabbage grafted onto a cabbage does not become a Doubled Cabbage. A small crowned cabbage climbs out of the plot instead, and a secret entry opens in the Discovery Catalogue.
+- **Raising it:** tend it once a day (E or G beside it). It grows from Sprout to Brassica Primelet to Prime-ling over five tended days.
+- **Moving it:** Alt+G picks it up into your satchel. Select it with Shift+G and press G to set it down wherever home is.
+- **Saving:** it is kept with your character and redrawn where you left it.
+
 ## Training
 
 | Action | XP |
@@ -82,6 +89,7 @@ Three more are waiting to be found, and every other pairing makes a hybrid of it
 | A graft takes / is rejected | 45 / 10 |
 | A new hybrid (first time each pairing) | +50 |
 | A new flagship hybrid | +200 |
+| The Brassica Primelet: found / each stage / tended (once a day, until grown) | +200 once / 30 / 5 |
 | Pick from a hybrid tree (once a day) or harvest a hybrid crop | 25 |
 | Reading the Observances | 33, once |
 
@@ -98,6 +106,7 @@ End shows your satchel, the hybrids you have found and the **Vanilla Plants** se
 | G | Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto a plant you grew, otherwise takes a cutting |
 | Alt+G | Always takes a cutting from what you aim at |
 | Shift+G | Selects the next cutting in your satchel |
+| E | Beside a Brassica Primelet: tends it (the game's own interact key; only when the game's prompt is not on something else) |
 | End | Shows Horticulture's level, XP, satchel and Discovery Catalogue, or what is still needed to unlock it |
 | Shift+End | Rereads the Observances of Brassica Prime |
 
@@ -107,6 +116,7 @@ The first run writes `config.txt` next to `enabled.txt`:
 |---------|---------|------|
 | `status_key` | `END` | The key above, by its UE4SS key name (for example `PAGE_DOWN` or `NUM_ZERO`). Shift with the same key rereads the book. |
 | `action_key` | `G` | The splicing key, by its UE4SS key name. Alt and Shift with it take a cutting and select the next one. |
+| `primelet_chance` | `1.5` | Percent of cabbage-on-cabbage grafts that become a Brassica Primelet once they take. `0` turns it off. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |
 
