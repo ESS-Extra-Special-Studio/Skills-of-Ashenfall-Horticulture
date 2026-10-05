@@ -8,4 +8,4 @@
 - Training: sowing, watering, composting, weeding, curing and harvesting pay XP when the plot really changes, as repeatable XP (`ESL.AddXp`). The first sowing of each kind of crop pays extra.
 - Discovery Catalogue: the first harvest of each of the 24 crops is catalogued with a card and bonus XP.
 - End shows Horticulture and the catalogue. Shift+End rereads the Observances once read. `config.txt` (written on first run) sets `status_key`, `quiet` and `debug`.
-- New badge: a whip graft bound with twine, and a budding knife.
+- Badge from the icon plan: a green leaf whose right half becomes a DNA double helix.
