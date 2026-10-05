@@ -20,6 +20,8 @@
 -- changes on plots within reach of their character.
 local UEHelpers = require("UEHelpers")
 local U = require("horticulture_util")
+local Crops = require("horticulture_crops")
+local Prize = require("horticulture_prize")
 
 local Training = {}
 
@@ -185,14 +187,36 @@ local function credited(kind, loc, me)
     return true
 end
 
-local function award(kind, id, extra)
+-- Repeatable work goes through ESL.AddXp, so nothing piles up in the save.
+-- ESL builds without it fall back to one-off awards under a unique id.
+local function repeatable(kind, id)
     local ESL, SKILL = cfg.ESL, cfg.SKILL
-    local gain = ESL.Award(SKILL, id, Training.XP[kind], LABEL[kind])
-    if gain and cfg.dev then U.log("XP " .. kind .. " +" .. gain .. " (" .. id .. ")") end
-    if extra then
-        local g2 = ESL.Award(SKILL, extra.id, Training.XP[extra.kind], LABEL[extra.kind])
-        if g2 and cfg.dev then U.log("XP " .. extra.kind .. " +" .. g2 .. " (" .. extra.id .. ")") end
+    if ESL.AddXp then return ESL.AddXp(SKILL, Training.XP[kind], LABEL[kind]) end
+    return ESL.Award(SKILL, id, Training.XP[kind], LABEL[kind])
+end
+
+-- The Discovery Catalogue: the first harvest of each kind of crop.
+local function catalogue(net)
+    local ESL, SKILL = cfg.ESL, cfg.SKILL
+    local key, name = Crops.Key(net)
+    local gain = ESL.Award(SKILL, "firstharvest:" .. key, Training.XP.firstHarvest, LABEL.firstHarvest .. ": " .. name)
+    if not gain then return end
+    if ESL.ShowCard and not cfg.quiet then
+        ESL.ShowCard(SKILL, "DISCOVERY CATALOGUE", name,
+            string.format("%d of %d crops catalogued", Training.CatalogueCount(), Crops.TOTAL))
     end
+end
+
+local function first_sowing(net)
+    local key, name = Crops.Key(net)
+    return cfg.ESL.Award(cfg.SKILL, "firstplant:" .. key, Training.XP.firstPlant, LABEL.firstPlant .. ": " .. name)
+end
+
+local function award(kind, id, net)
+    local gain = repeatable(kind, id)
+    if gain and (cfg.dev or cfg.debug) then U.log("XP " .. kind .. " +" .. gain) end
+    if net and kind == "plant" then first_sowing(net) end
+    if net and kind == "harvest" then catalogue(net) end
 end
 
 -- Compares a plot's state with the last reading and pays for what the
@@ -200,30 +224,48 @@ end
 local function compare(slot, old, cur, me, rain)
     local key = U.hash(slot.key)
     local stamp = tostring(os.time())
-    local function pay(kind, id, extra)
-        if credited(kind, slot.loc, me) then award(kind, id, extra) end
+    local function pay(kind, id, net)
+        if credited(kind, slot.loc, me) then
+            award(kind, id, net)
+            return true
+        end
+        return false
     end
 
     if cur.stage == PLANTED and (old.stage == IDLE or old.stage == WEEDS) then
-        planting[slot.key] = stamp
-        pay("plant", "plant:" .. key .. ":" .. stamp,
-            cur.net and { kind = "firstPlant", id = "firstplant:" .. cur.net } or nil)
+        planting[slot.key] = { serial = stamp, tended = {} }
+        pay("plant", "plant:" .. key .. ":" .. stamp, cur.net)
     elseif old.stage == WEEDS and cur.stage == IDLE then
         pay("weed", "weed:" .. key .. ":" .. stamp)
     elseif old.stage == DISEASED and cur.stage == PLANTED then
         pay("cure", "cure:" .. key .. ":" .. stamp)
     elseif old.stage == HARVESTABLE and cur.stage ~= HARVESTABLE and cur.stage ~= 5 then
-        pay("harvest", "harvest:" .. key .. ":" .. stamp,
-            old.net and { kind = "firstHarvest", id = "firstharvest:" .. old.net } or nil)
+        pay("harvest", "harvest:" .. key .. ":" .. stamp, old.net)
         planting[slot.key] = nil
+        Prize.Clear(slot)
     end
 
-    local serial = planting[slot.key] or "s"
-    if cur.water > old.water + 0.001 and cur.stage ~= IDLE and not rain then
-        pay("water", "water:" .. key .. ":" .. serial .. ":" .. tostring(cur.growth or 0))
+    -- Watering pays once per growth stage of a planting, composting once
+    -- per planting; the unique ids matter only to the Award fallback.
+    if not planting[slot.key] and cur.stage ~= IDLE and cur.stage ~= WEEDS then
+        planting[slot.key] = { serial = "s" .. stamp, tended = {} }
     end
-    if cur.fert > old.fert + 0.001 then
-        pay("compost", "compost:" .. key .. ":" .. serial)
+    local p = planting[slot.key]
+    local serial = p and p.serial or "s"
+    local stage = "w" .. tostring(cur.growth or 0)
+    if cur.water > old.water + 0.001 and cur.stage ~= IDLE and not rain and not (p and p.tended[stage]) then
+        if pay("water", "water:" .. key .. ":" .. serial .. ":" .. stage) and p then p.tended[stage] = true end
+    end
+    if cur.fert > old.fert + 0.001 and not (p and p.tended.fed) then
+        if pay("compost", "compost:" .. key .. ":" .. serial) and p then p.tended.fed = true end
+    end
+
+    if cur.stage == HARVESTABLE and p and p.tended.fed then
+        local days = 0
+        for k in pairs(p.tended) do
+            if k:sub(1, 1) == "w" then days = days + 1 end
+        end
+        if days >= 2 then Prize.Apply(slot) end
     end
 end
 
@@ -267,6 +309,26 @@ function Training.Start(config)
         if not hooksOk then U.game(register_hooks) end
     end)
     U.every(500, "Farming check", function() U.game(tick) end)
+end
+
+-- Catalogue keys of the crops this character has harvested, in order.
+function Training.Catalogue()
+    local list = {}
+    for _, id in ipairs(cfg.ESL.Paid(cfg.SKILL) or {}) do
+        local key = tostring(id):match("^firstharvest:(.+)$")
+        if key then list[#list + 1] = key end
+    end
+    return list
+end
+
+function Training.CatalogueCount() return #Training.Catalogue() end
+
+-- One line for the status display.
+function Training.CatalogueLine()
+    local names = {}
+    for _, key in ipairs(Training.Catalogue()) do names[#names + 1] = Crops.NameOf(key) end
+    if #names == 0 then return "Discovery Catalogue: no crops yet" end
+    return string.format("Discovery Catalogue %d/%d: %s", #names, Crops.TOTAL, table.concat(names, ", "))
 end
 
 -- For the dev dump.

@@ -3,6 +3,7 @@
 -- Observances of Brassica Prime, hidden in a hymnal by the Bramblemead
 -- cabbage patch.
 local MOD = "Skills of Ashenfall: Horticulture"
+-- Permanent: names every player's save file. Never change it.
 local SKILL = "Horticulture"
 local VERSION = "1.0.0"
 local BOOK_ID = "BrassicaPrime"
@@ -41,9 +42,14 @@ local Training = require("horticulture_training")
 
 -- dev.txt turns on the developer keys. dev-unlock.txt as well drops the
 -- Historian and Farming requirements, for testing on a fresh character; the
--- book is still required. Neither file ships (tools\check_release.ps1).
+-- book is still required. showcase.txt drops them too, with no developer
+-- keys, for recording the unlock on a low-level character. spike.txt logs
+-- farming hooks and plot state for the in-game spike. None of these files
+-- ships (tools\check_release.ps1).
 local DEV = U.exists(dir .. "\\..\\dev.txt")
-local DEV_UNLOCK = DEV and U.exists(dir .. "\\..\\dev-unlock.txt")
+local SHOWCASE = U.exists(dir .. "\\..\\showcase.txt")
+local DEV_UNLOCK = (DEV and U.exists(dir .. "\\..\\dev-unlock.txt")) or SHOWCASE
+local SPIKE = U.exists(dir .. "\\..\\spike.txt")
 local FORCE_MESH = U.exists(dir .. "\\..\\book-mesh.txt")
 
 ESL.Depends(ESL.HISTORIAN, "1.0.0", MOD)
@@ -56,7 +62,8 @@ local requires = {
 }
 if DEV_UNLOCK then
     requires = { BOOK_REQUIREMENT }
-    log("[DEV] dev-unlock.txt: Historian 25 and Farming 25 are not required in this session. Never ship this file.")
+    log("[DEV] " .. (SHOWCASE and "showcase.txt" or "dev-unlock.txt")
+        .. ": Historian 25 and Farming 25 are not required in this session. Never ship this file.")
 end
 
 local DEV_PERKS = {
@@ -77,13 +84,16 @@ ESL.RegisterSkill({
     flavour = "Coax new things out of old seed: save it, cross it, graft it and feed the soil.",
     levelUpText = "Sow, water, feed, cure and harvest your crops to gain Horticulture XP.",
     panelLabel = "Progress to next level",
-    trainingText = "Every crop you sow, water, compost, cure or harvest pays Horticulture XP, and the first sowing and harvest of each kind of crop pays extra.",
+    trainingText = "Every crop you sow, water, compost, cure or harvest pays Horticulture XP. The first harvest of each kind of crop enters it in your Discovery Catalogue for extra XP.",
     requires = requires,
     perks = DEV and DEV_PERKS or {},
 })
 
 -- The world prompt on our own book shows the Historian level it needs.
 ESL.RequireSkill(ESL.HISTORIAN, 25, Lore.PROMPT_NAME)
+
+local Settings = require("horticulture_config").Load(dir, log)
+local STATUS_KEY = Settings.status_key
 
 local config = {
     ESL = ESL,
@@ -93,6 +103,8 @@ local config = {
     dev = DEV,
     devUnlock = DEV_UNLOCK,
     forceMesh = FORCE_MESH,
+    quiet = Settings.quiet,
+    debug = Settings.debug,
 }
 
 Book.Start(config)
@@ -125,24 +137,30 @@ local function in_world()
     return U.pc() ~= nil and ESL.Character() ~= nil
 end
 
-RegisterKeyBindAsync(Key.F10, {}, function()
+RegisterKeyBindAsync(Key[STATUS_KEY], {}, function()
     if not in_world() then log("Load into a world first") return end
     if not ESL.IsUnlocked(SKILL) then
         ESL.Gate(SKILL, { notify = true, title = "Horticulture", skill = SKILL })
         return
     end
-    ESL.ToggleStatus(SKILL)
+    ESL.ToggleStatus(SKILL, Training.CatalogueLine)
 end)
 
-RegisterKeyBindAsync(Key.F10, { ModifierKey.SHIFT }, function()
+RegisterKeyBindAsync(Key[STATUS_KEY], { ModifierKey.SHIFT }, function()
     Book.Reread()
 end)
 
-if DEV then
-    require("horticulture_dev").Start(config, Book, Training)
-    RegisterKeyBindAsync(Key.F6, { ModifierKey.CONTROL }, function() ESL.TestNotifications(SKILL) end)
-    RegisterKeyBindAsync(Key.F7, { ModifierKey.CONTROL }, function() ESL.SelectInSkillsMenu(SKILL) end)
+if SPIKE then
+    require("horticulture_spike").Start(config)
 end
 
-log("Loaded " .. VERSION .. ". F10 shows Horticulture, Shift+F10 rereads the Observances."
+if DEV then
+    require("horticulture_dev").Start(config, Book, Training)
+    local CTRL_SHIFT = { ModifierKey.CONTROL, ModifierKey.SHIFT }
+    RegisterKeyBindAsync(Key.F2, CTRL_SHIFT, function() ESL.TestNotifications(SKILL) end)
+    RegisterKeyBindAsync(Key.F3, CTRL_SHIFT, function() ESL.SelectInSkillsMenu(SKILL) end)
+end
+
+log("Loaded " .. VERSION .. ". " .. STATUS_KEY .. " shows Horticulture, Shift+" .. STATUS_KEY
+    .. " rereads the Observances." .. (Settings.quiet and " Quiet mode is on." or "")
     .. (DEV and " Developer keys on." or ""))

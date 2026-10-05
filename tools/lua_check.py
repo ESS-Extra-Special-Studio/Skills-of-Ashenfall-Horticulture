@@ -37,6 +37,13 @@ def syntax():
 
 STUBS = r"""
 local sandbox = ...
+-- ESL keeps progress under %LOCALAPPDATA%; point it into the sandbox so a
+-- check can never create or move anything in the real Saved folder.
+local real_getenv = os.getenv
+os.getenv = function(k)
+    if k == "LOCALAPPDATA" then return sandbox .. "\\LocalAppData" end
+    return real_getenv(k)
+end
 Key = setmetatable({}, { __index = function(_, k) return k end })
 ModifierKey = { CONTROL = "CONTROL", SHIFT = "SHIFT", ALT = "ALT" }
 loops, keys, prints = {}, {}, {}
@@ -73,18 +80,28 @@ end
 """
 
 
-def boot(dev=False):
+SWITCHES = ("dev.txt", "dev-unlock.txt", "showcase.txt", "spike.txt", "book-mesh.txt", "placement.txt", "config.txt")
+
+
+def boot(files=()):
     if os.path.isdir(SANDBOX):
         shutil.rmtree(SANDBOX)
     shutil.copytree(ESL, os.path.join(SANDBOX, "ESLDragonWilds"),
                     ignore=shutil.ignore_patterns("Saves", "Saves.*"))
+    runtime = os.path.join(SANDBOX, "ESLDragonWilds", "Runtime")
+    if os.path.isdir(runtime):
+        for f in os.listdir(runtime):
+            p = os.path.join(runtime, f)
+            if os.path.isfile(p) and f != ".gitkeep":
+                os.remove(p)
+    os.makedirs(runtime, exist_ok=True)
     os.makedirs(os.path.join(SANDBOX, "ESLDragonWilds", "Saves"), exist_ok=True)
+    os.makedirs(os.path.join(SANDBOX, "LocalAppData", "RSDragonwilds", "Saved"), exist_ok=True)
     shutil.copytree(MOD, os.path.join(SANDBOX, "SkillsOfAshenfallHorticulture"),
-                    ignore=shutil.ignore_patterns("dev.txt", "dev-unlock.txt", "placement.txt"))
-    if dev:
-        for name in ("dev.txt", "dev-unlock.txt"):
-            open(os.path.join(SANDBOX, "SkillsOfAshenfallHorticulture", name), "w").close()
-    print("--- boot", "with dev.txt and dev-unlock.txt" if dev else "release")
+                    ignore=shutil.ignore_patterns(*SWITCHES))
+    for name in files:
+        open(os.path.join(SANDBOX, "SkillsOfAshenfallHorticulture", name), "w").close()
+    print("--- boot", ("with " + ", ".join(files)) if files else "release")
     main = os.path.join(SANDBOX, "SkillsOfAshenfallHorticulture", "Scripts", "main.lua")
     lua = lua54.LuaRuntime()
     lua.execute(STUBS, SANDBOX)
@@ -119,7 +136,8 @@ def boot(dev=False):
 
 if __name__ == "__main__":
     failures = syntax()
-    failures += boot(dev=True)
+    failures += boot(("dev.txt", "dev-unlock.txt", "spike.txt"))
+    failures += boot(("showcase.txt",))
     failures += boot()
     print("RESULT", "FAIL" if failures else "PASS")
     sys.exit(1 if failures else 0)

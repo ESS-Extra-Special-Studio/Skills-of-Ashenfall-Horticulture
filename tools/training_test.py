@@ -16,7 +16,7 @@ from lupa import lua54  # noqa: E402
 SCRIPTS = os.path.join(ROOT, "SkillsOfAshenfallHorticulture", "Scripts")
 
 HARNESS = r"""
-local scripts, withHooks = ...
+local scripts, withHooks, withAddXp = ...
 package.path = scripts .. "\\?.lua;" .. package.path
 Key = setmetatable({}, { __index = function(_, k) return k end })
 ModifierKey = {}
@@ -48,7 +48,23 @@ function make_plot(i, x)
     plots[#plots + 1] = p
     return p
 end
-function FindAllOf(cls) if cls == "FarmSlotComponent" then return plots end return nil end
+-- Crop 7 is a cabbage the data subsystem can name; crop 3 is unknown.
+local function plant(asset, name)
+    return obj("FarmPlantDataAsset /Game/Gameplay/Farming/Plants/" .. asset .. "." .. asset, {
+        GetFName = function() return { ToString = function() return asset end } end,
+        DisplayName = { ToString = function() return name end },
+    })
+end
+local cabbage = plant("FPD_Cabbage", "Cabbage")
+subsystem = obj("DominionDataSubsystem /Engine/Transient.Data", {
+    GetNetIdForData = function(_, data) if data == cabbage then return 7 end return 0 end,
+})
+function FindFirstOf(cls) if cls == "DominionDataSubsystem" then return subsystem end return nil end
+function FindAllOf(cls)
+    if cls == "FarmSlotComponent" then return plots end
+    if cls == "FarmPlantDataAsset" then return { cabbage } end
+    return nil
+end
 local invalid = { IsValid = function() return false end }
 function StaticFindObject(path)
     if withHooks and path:find("FarmCommandComponent:", 1, true) then return obj(path) end
@@ -69,17 +85,31 @@ package.preload["UEHelpers"] = function()
 end
 
 unlocked = true
-local paid = {}
+local paid, order = {}, {}
+cards = {}
 ESL = {
     Character = function() return "Tester" end,
     IsUnlocked = function() return unlocked end,
     Award = function(skill, id, xp, label)
         if not unlocked or paid[id] then return nil end
         paid[id] = true
+        order[#order + 1] = id
         awards[#awards + 1] = id .. "=" .. xp
         return xp
     end,
+    Paid = function() return order end,
+    ShowCard = function(skill, kicker, title, detail)
+        cards[#cards + 1] = kicker .. "|" .. title .. "|" .. detail
+        return true
+    end,
 }
+if withAddXp then
+    ESL.AddXp = function(skill, xp, label)
+        if not unlocked then return nil end
+        awards[#awards + 1] = "add:" .. label .. "=" .. xp
+        return xp
+    end
+end
 Training = require("horticulture_training")
 Training.Start({ ESL = ESL, SKILL = "Horticulture", dev = false })
 
@@ -98,9 +128,9 @@ end
 """
 
 
-def runtime(with_hooks):
+def runtime(with_hooks, with_addxp=False):
     lua = lua54.LuaRuntime()
-    lua.execute(HARNESS, SCRIPTS, with_hooks)
+    lua.execute(HARNESS, SCRIPTS, with_hooks, with_addxp)
     return lua
 
 
@@ -130,7 +160,7 @@ check("baseline pays nothing", g.take(), [], ["plant"])
 g.set(p1, "PlotStage", 1); g.set(p1, "PlantDataNetID", 7)
 g.step()
 got = g.take()
-check("sow pays plant + first sowing", got, ["plant:", "=30", "firstplant:7=50"])
+check("sow pays plant + first sowing", got, ["plant:", "=30", "firstplant:FPD_Cabbage=50"])
 g.set(p2, "PlotStage", 1); g.set(p2, "PlantDataNetID", 7)
 g.step()
 got = g.take()
@@ -163,7 +193,10 @@ g.step()
 check("ripening pays nothing", g.take(), [], ["harvest"])
 g.set(p1, "PlotStage", 0)
 g.step()
-check("harvest pays + first harvest", g.take(), ["harvest:", "=70", "firstharvest:7=100"])
+check("harvest pays + first harvest", g.take(), ["harvest:", "=70", "firstharvest:FPD_Cabbage=100"])
+card = g.cards[1] if len(g.cards) else ""
+check("catalogue card on first harvest", card or "", ["DISCOVERY CATALOGUE|Cabbage|1 of 24"])
+check("catalogue line", g.Training.CatalogueLine(), ["1/24: Cabbage"])
 g.set(far, "PlotStage", 1)
 g.step()
 check("plot out of reach pays nothing", g.take(), [], ["plant"])
@@ -199,10 +232,48 @@ g.step(); g.take()
 g.call_hook("Server_TryPlantSeed", g.farm)
 g.set(p1, "PlotStage", 1)
 g.step()
-check("host: own sowing pays", g.take(), ["plant:", "firstplant:3=50"])
+check("host: own sowing pays, unknown crop by id", g.take(), ["plant:", "firstplant:net3=50"])
 g.set(p1, "WateringProgress", 0.3)
 g.step()
 check("host: water without own request pays nothing", g.take(), [], ["water"])
+
+# ESL with AddXp: repeatable work records nothing per source.
+L = runtime(False, True)
+g = L.globals()
+p1 = g.make_plot(1, 100)
+g.step()
+g.set(p1, "PlotStage", 1); g.set(p1, "PlantDataNetID", 7)
+g.step()
+check("AddXp: sowing is repeatable XP, first sowing still once", g.take(),
+      ["add:Seed sown=30", "firstplant:FPD_Cabbage=50"], [" plant:", "=30 plant:"])
+g.set(p1, "WateringProgress", 0.2)
+g.step()
+check("AddXp: water pays", g.take(), ["add:Watered=15"])
+g.set(p1, "WateringProgress", 0.4)
+g.step()
+check("AddXp: more water same stage pays nothing", g.take(), [], ["Watered"])
+g.set(p1, "GrowthStage", 1); g.set(p1, "WateringProgress", 0.0)
+g.step(); g.take()
+g.set(p1, "WateringProgress", 0.2)
+g.step()
+check("AddXp: water next stage pays", g.take(), ["add:Watered=15"])
+g.set(p1, "FertilizingProgress", 0.2)
+g.step()
+g.set(p1, "FertilizingProgress", 0.6)
+g.step()
+check("AddXp: compost pays once", g.take(), ["add:Soil fed=30"])
+g.set(p1, "PlotStage", 2)
+g.step(); g.take()
+g.set(p1, "PlotStage", 0)
+g.step()
+check("AddXp: harvest repeatable + catalogue once", g.take(), ["add:Crop harvested=70", "firstharvest:FPD_Cabbage=100"])
+g.set(p1, "PlotStage", 1)
+g.step(); g.take()
+g.set(p1, "PlotStage", 2)
+g.step(); g.take()
+g.set(p1, "PlotStage", 0)
+g.step()
+check("AddXp: second harvest, no second catalogue entry", g.take(), ["add:Crop harvested=70"], ["firstharvest"])
 
 print("RESULT", "FAIL" if failures else "PASS")
 sys.exit(1 if failures else 0)

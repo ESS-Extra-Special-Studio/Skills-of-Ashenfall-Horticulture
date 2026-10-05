@@ -1,5 +1,12 @@
-﻿TOTAL = [0, 33, 70, 111, 156, 206, 261, 322, 389, 463, 545, 636, 736, 847, 969, 1104, 1253, 1417, 1598, 1798,
-         2018, 2261, 2529, 2825, 3152]
+﻿import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "pylib"))
+from lupa import lua54  # noqa: E402
+
+CURVE = r"<user>\IdeaProjects\ESL-DragonWilds\ESLDragonWilds\Scripts\curve.lua"
+_t = lua54.LuaRuntime().execute(open(CURVE, encoding="utf-8").read()).TOTAL
+TOTAL = [int(_t[i]) for i in range(1, 26)]
 XP = dict(plant=30, water=15, compost=30, harvest=70, firstPlant=50, firstHarvest=100)
 
 

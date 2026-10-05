@@ -6,6 +6,11 @@ tools/pylib/
 SkillsOfAshenfallHorticulture/dev.txt
 SkillsOfAshenfallHorticulture/dev-unlock.txt
 SkillsOfAshenfallHorticulture/book-mesh.txt
+SkillsOfAshenfallHorticulture/showcase.txt
+SkillsOfAshenfallHorticulture/spike.txt
+
+# Written on first run with the player's own keys and settings
+SkillsOfAshenfallHorticulture/config.txt
 
 # Saves and temporary files
 Saves/

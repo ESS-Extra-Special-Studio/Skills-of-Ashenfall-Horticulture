@@ -66,9 +66,13 @@ local function can_decipher()
     return (cfg.ESL.MeetsRequirements({ { skill = cfg.ESL.HISTORIAN, level = 25 } }))
 end
 
+local leaf = 0
+
 local function texts(ready)
-    if ready then return Lore.TITLE, Lore.BODY end
-    return Lore.PROMPT_NAME, Lore.LOCKED_BODY
+    if not ready then return Lore.PROMPT_NAME, Lore.LOCKED_BODY end
+    if not Lore.SPLIT_LEAVES then return Lore.TITLE, Lore.BODY end
+    leaf = leaf + 1
+    return Lore.Leaf(leaf)
 end
 
 -- The local player's JournalComponent, matched the way Historian matches it.
@@ -426,7 +430,7 @@ local function finish(ready)
     if ready then
         if ESL.ReadBook(SKILL, cfg.BOOK_ID) then
             U.log("Observances of Brassica Prime read by " .. tostring(ESL.Character()))
-            if ExecuteWithDelay then
+            if ExecuteWithDelay and not cfg.quiet then
                 ExecuteWithDelay(6000, function()
                     if not ESL.IsUnlocked(SKILL) then
                         ESL.Gate(SKILL, { notify = true, title = "Horticulture", skill = SKILL })
