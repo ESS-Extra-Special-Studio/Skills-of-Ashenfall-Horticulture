@@ -160,10 +160,10 @@ if SPIKE then
 end
 
 if DEV then
-    require("horticulture_dev").Start(config, Book, Training, Splicing)
-    local CTRL_SHIFT = { ModifierKey.CONTROL, ModifierKey.SHIFT }
-    RegisterKeyBindAsync(Key.F2, CTRL_SHIFT, function() ESL.TestNotifications(SKILL) end)
-    RegisterKeyBindAsync(Key.F3, CTRL_SHIFT, function() ESL.SelectInSkillsMenu(SKILL) end)
+    local Dev = require("horticulture_dev")
+    Dev.Start(config, Book, Training, Splicing)
+    RegisterKeyBindAsync(Key.F2, Dev.SHIFT_ALT, function() ESL.TestNotifications(SKILL) end)
+    RegisterKeyBindAsync(Key.F3, Dev.SHIFT_ALT, function() ESL.SelectInSkillsMenu(SKILL) end)
 end
 
 log("Loaded " .. VERSION .. ". " .. STATUS_KEY .. " shows Horticulture, Shift+" .. STATUS_KEY

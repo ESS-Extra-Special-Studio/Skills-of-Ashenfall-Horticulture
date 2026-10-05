@@ -428,10 +428,12 @@ function Splicing.Action()
         return
     end
     local g = c.kind ~= "stump" and c.kind ~= "wild" and Core.GraftOn(st, as_point(c)) or nil
+    local pickWhy = nil
     if g and g.state == "hybrid" and g.kind ~= "plot" then
         local ok, why = Core.CanPick(st, g)
         if ok then pick(g) return end
         if not Core.Selected(st) then refuse("NOTHING TO PICK", why) return end
+        pickWhy = why
     end
     if c.kind == "stump" then refuse("HORTICULTURE", "Nothing grows from a stump") return end
     -- With a cutting in hand, a plant you grew is a host: say why a graft
@@ -440,6 +442,8 @@ function Splicing.Action()
     if Core.Selected(st) and isHost then
         local ok, why = graft(c)
         if ok then return end
+        -- A hybrid picked today: its harvest is the news, not the graft.
+        if pickWhy then refuse("NOTHING TO PICK", pickWhy) return end
         U.log("CANNOT GRAFT: " .. tostring(why))
         if not cfg.quiet then
             cfg.ESL.ShowCard(cfg.SKILL, "CANNOT GRAFT", why, "Ctrl+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
@@ -515,7 +519,20 @@ function Splicing.Dump()
     else
         U.log("[splice] aimed: nothing")
     end
+    local me = U.location(U.pawn())
+    if me then
+        for _, h in ipairs(World.Nearby(me, 6000)) do
+            if h.kind == "plot" or h.planted then
+                U.log(string.format("[splice] planted %s %s at %.0f, %.0f (%.0f m)", h.kind, tostring(h.species),
+                    h.loc.X, h.loc.Y, U.dist2d(h.loc, me) / 100))
+            end
+        end
+        for _, w in ipairs(World.WildSpawners(me, 6000)) do
+            U.log(string.format("[splice] wild %s at %.0f, %.0f (%.0f m)", w.species, w.loc.X, w.loc.Y, U.dist2d(w.loc, me) / 100))
+        end
+    end
     U.log("[splice] held axe power " .. tostring((World.HeldAxe())))
+    World.DumpEquipment()
     U.log("[splice] " .. Splicing.CatalogueLine())
 end
 

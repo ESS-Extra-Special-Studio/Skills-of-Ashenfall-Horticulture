@@ -265,6 +265,32 @@ pick = L.eval(r"""function()
 end""")()
 check("aim picks plot, tree trunk, nothing behind, not out of reach", pick == "plot tree - -", pick)
 
+tall = L.eval(r"""function()
+    local W = require("horticulture_world")
+    local me = { X = 0, Y = 0, Z = 0 }
+    local eye = { X = -400, Y = 0, Z = 160 }
+    local list = { { kind = "sapling", planted = true, loc = { X = 200, Y = 0, Z = 0 }, name = "sapling" } }
+    local a = W.Pick(list, eye, { X = 1, Y = 0, Z = 0 }, me)
+    local b = W.Pick(list, eye, { X = 0, Y = 1, Z = 0 }, me)
+    return (a and a.name or "-") .. " " .. (b and b.name or "-")
+end""")()
+check("a level camera ray hits a grown sapling's trunk", tall == "sapling -", tall)
+
+feet = L.eval(r"""function()
+    local W = require("horticulture_world")
+    local me = { X = 0, Y = 0, Z = 0 }
+    local list = {
+        { kind = "wild", loc = { X = 50, Y = 0, Z = 0 }, name = "wild" },
+        { kind = "sapling", planted = false, loc = { X = 80, Y = 0, Z = 0 }, name = "wildsap" },
+        { kind = "sapling", planted = true, loc = { X = 150, Y = 0, Z = 0 }, name = "shoot" },
+        { kind = "sapling", planted = true, loc = { X = 200, Y = 0, Z = 0 }, name = "far" },
+    }
+    local a = W.NearestPlanted(list, me, 220)
+    local b = W.NearestPlanted(list, me, 100)
+    return (a and a.name or "-") .. " " .. (b and b.name or "-")
+end""")()
+check("a planted shoot at the feet counts as aimed; wild ones do not", feet == "shoot -", feet)
+
 # Looks layouts ------------------------------------------------------------
 lay = L.eval(r"""function()
     local Looks = require("horticulture_looks")
@@ -399,6 +425,11 @@ g.axe = 1
 g.press("CTRL+G")
 check("Ctrl+G with a stone axe takes an ash cutting", "Cutting taken=8" in g.take("xp"))
 g.take("cards")
+g.aimed = ash
+g.press("G")
+c = g.take("cards")
+check("picked hybrid with a cutting in hand says when to pick, not that it cannot graft",
+      "NOTHING TO PICK|Already picked today" in c and "CANNOT GRAFT" not in c, c)
 cab = g.plot("FPD_Cabbage", 1, 1200)
 g.nearby = L.table_from([potato, ash, cab])
 g.aimed = cab

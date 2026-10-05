@@ -22,6 +22,7 @@ local World = {}
 
 local REACH = { plot = 450, sapling = 500, tree = 750, wild = 400 }
 local RADIUS = { plot = 90, sapling = 70, tree = 160, wild = 60 }
+local TRUNK = { tree = 1200, sapling = 400 }
 local WILD_CLASSES = { "GatherableResource", "HarvestableResource" }
 local PROMPT = "WBP_HUD_InteractionPrompt_C"
 local SCAN = 2000
@@ -240,6 +241,23 @@ function World.Nearby(center, range)
     return out
 end
 
+-- Developer aid: the game's wild crop spawners (BP_Spawner_Potato_C and the
+-- like) within range, for finding a plant to take a cutting from.
+local SPAWNERS = { "BP_Spawner_Potato_C", "BP_Spawner_Cabbage_C", "BP_Spawner_Onion_C", "BP_Spawner_Wheat_C" }
+function World.WildSpawners(center, range)
+    local out = {}
+    for _, cls in ipairs(SPAWNERS) do
+        for _, a in ipairs(U.live_of(cls)) do
+            local loc = U.location(a)
+            local species = World.CropFromName(cls)
+            if loc and species and U.dist2d(loc, center) <= range then
+                out[#out + 1] = { species = species, loc = loc, actor = a }
+            end
+        end
+    end
+    return out
+end
+
 -- The interaction prompt the game shows for what the player looks at, when
 -- it names a crop ("Potato", "Cabbage"): wild plants drawn as foliage have
 -- no actor of their own until the game makes one for the prompt.
@@ -300,12 +318,13 @@ function World.Pick(candidates, eye, dir, me)
             local tx, ty, tz = c.loc.X - eye.X, c.loc.Y - eye.Y, c.loc.Z + lift - eye.Z
             local along = tx * dir.X + ty * dir.Y + tz * dir.Z
             if along > 0 then
-                -- Trees are tall: measure to the trunk line, not one point.
+                -- Trees and grown saplings are tall: measure to the trunk
+                -- line, not one point.
                 local px, py, pz = eye.X + dir.X * along, eye.Y + dir.Y * along, eye.Z + dir.Z * along
                 local dz = 0
-                if kind == "tree" then
+                if TRUNK[kind] then
                     local rel = pz - c.loc.Z
-                    if rel > 0 and rel < 1200 then dz = 0 else dz = pz - (c.loc.Z + lift) end
+                    if rel > 0 and rel < TRUNK[kind] then dz = 0 else dz = pz - (c.loc.Z + lift) end
                 else
                     dz = pz - (c.loc.Z + lift)
                 end
@@ -321,47 +340,142 @@ function World.Pick(candidates, eye, dir, me)
     return best
 end
 
+-- The sapling or tree the game's own prompt is on ("Ash Shoot - Destroy").
+-- The camera ray of the over-the-shoulder view passes well beyond a shoot
+-- at the player's feet; the prompt does not.
+function World.PromptHost(me)
+    for _, prompt in ipairs(U.live_of(PROMPT)) do
+        if U.visible(prompt) then
+            local actor = prop(prompt, "CurrentWorldActor")
+            local loc = U.valid(actor) and U.location(actor) or nil
+            if loc and U.dist2d(loc, me) <= REACH.tree then
+                for _, n in ipairs(class_names(actor)) do
+                    if n == "SaplingBase" then return sapling_info(actor) end
+                    if n == "FellableTree" then return tree_info(actor) end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- The closest plant the player grew within a short reach. Pure.
+function World.NearestPlanted(candidates, me, range)
+    local best, bestD = nil, range
+    for _, c in ipairs(candidates) do
+        if c.kind == "plot" or c.planted then
+            local d = U.dist2d(c.loc, me)
+            if d <= bestD then best, bestD = c, d end
+        end
+    end
+    return best
+end
+
+local AT_FEET = 300
+
 function World.Aimed()
     local me = U.location(U.pawn())
     if not me then return nil end
     local eye, dir = World.Camera()
     if not eye then return nil end
-    local best = World.Pick(World.Nearby(me, 1000), eye, dir, me)
-    -- Something the player grew wins; otherwise a crop the game's own
-    -- prompt names, then whatever the camera points at.
+    local near = World.Nearby(me, 1000)
+    local best = World.Pick(near, eye, dir, me)
+    -- Something the player grew wins: under the camera ray, under the game's
+    -- prompt, or at their feet. Otherwise a crop the prompt names, then
+    -- whatever the camera points at.
     if best and (best.kind == "plot" or best.planted) then return best end
-    return World.PromptCrop(me) or best
+    local host = World.PromptHost(me)
+    if host and host.planted then return host end
+    return World.PromptCrop(me) or best or World.NearestPlanted(near, me, AT_FEET)
 end
 
--- The axe in the player's hand: its power, item name and how it was read.
+-- The player's LoadoutComponent (on the controller or the pawn).
+local function loadout()
+    local names = { [U.full(U.pc())] = true, [U.full(U.pawn())] = true }
+    for _, comp in ipairs(U.live_of("LoadoutComponent")) do
+        local owner = nil
+        pcall(function() owner = comp:GetOwner() end)
+        if names[U.full(owner)] then return comp end
+    end
+    return nil
+end
+
+-- What the loadout holds in each slot. ELoadoutSlot runs Head .. FishingBait
+-- (HeldRight 7, HeldLeft 8 in build 25632050); every slot is read so an
+-- order change cannot hide the hands.
+local LOADOUT_SLOTS = 10
+local function loadout_items(comp)
+    local out = {}
+    for slot = 0, LOADOUT_SLOTS do
+        local eq = nil
+        pcall(function() eq = comp:GetEquipmentFromSlot(slot) end)
+        if U.valid(eq) then
+            local data = nil
+            pcall(function() data = eq:BP_GetEquipmentData() end)
+            out[#out + 1] = { slot = slot, eq = eq, data = U.valid(data) and data or nil,
+                name = U.valid(data) and U.fname(data) or U.fname(eq) }
+        end
+    end
+    return out
+end
+
+local function axe_from(item)
+    local byName = Rules.AxePower(item.name)
+    if not byName then return nil end
+    local power, src = byName, "item name"
+    local okP, base = pcall(function() return item.data:GetBasePowerLevel() end)
+    if okP and tonumber(base) and tonumber(base) > 0 then power, src = tonumber(base), "GetBasePowerLevel" end
+    return power, src
+end
+
+-- The axe in the player's hand: its power and item name.
 local equipLogged = false
 function World.HeldAxe()
     local pawn = U.pawn()
     if not pawn then return nil end
-    local pawnName = U.full(pawn)
-    for _, eq in ipairs(U.live_of("Equipment")) do
-        local owner = nil
-        pcall(function() owner = eq:GetOwner() end)
-        local parent = nil
-        pcall(function() parent = eq:GetAttachParentActor() end)
-        if U.full(owner) == pawnName or U.full(parent) == pawnName then
-            local data = nil
-            pcall(function() data = eq:BP_GetEquipmentData() end)
-            local name = U.valid(data) and U.fname(data) or U.fname(eq)
-            local byName = Rules.AxePower(name)
-            if byName then
-                local power, how = byName, "item name"
-                local okP, base = pcall(function() return data:GetBasePowerLevel() end)
-                if okP and tonumber(base) and tonumber(base) > 0 then power, how = tonumber(base), "GetBasePowerLevel" end
-                if not equipLogged then
-                    equipLogged = true
-                    U.log(string.format("Held axe read: %s, power %d (%s; by name %d)", name, power, how, byName))
-                end
-                return power, name
+    local items, how = {}, nil
+    local comp = loadout()
+    if comp then
+        items, how = loadout_items(comp), "LoadoutComponent"
+    else
+        local pawnName = U.full(pawn)
+        for _, eq in ipairs(U.live_of("Equipment")) do
+            local owner, parent = nil, nil
+            pcall(function() owner = eq:GetOwner() end)
+            pcall(function() parent = eq:GetAttachParentActor() end)
+            if U.full(owner) == pawnName or U.full(parent) == pawnName then
+                local data = nil
+                pcall(function() data = eq:BP_GetEquipmentData() end)
+                items[#items + 1] = { eq = eq, data = U.valid(data) and data or nil,
+                    name = U.valid(data) and U.fname(data) or U.fname(eq) }
             end
+        end
+        how = "attached Equipment"
+    end
+    for _, item in ipairs(items) do
+        local power, src = axe_from(item)
+        if power then
+            if not equipLogged then
+                equipLogged = true
+                U.log(string.format("Held axe read: %s, power %d (%s, %s slot %s)", item.name, power, src, how, tostring(item.slot)))
+            end
+            return power, item.name
         end
     end
     return nil
+end
+
+-- Developer dump: the player's loadout, slot by slot.
+function World.DumpEquipment()
+    local comp = loadout()
+    if not comp then
+        U.log(string.format("[splice] no LoadoutComponent owned by the player (%d live)", #U.live_of("LoadoutComponent")))
+        return
+    end
+    U.log("[splice] loadout " .. U.full(comp))
+    for _, item in ipairs(loadout_items(comp)) do
+        U.log(string.format("[splice]   slot %d: %s", item.slot, item.name))
+    end
 end
 
 -- Hour of the in-game clock (0-24, fractional), or nil.
