@@ -5,11 +5,16 @@ $root = Split-Path -Parent $PSScriptRoot
 $mod = Join-Path $root "SkillsOfAshenfallHorticulture"
 $failed = $false
 
-foreach ($name in @("dev.txt", "dev-unlock.txt", "showcase.txt", "spike.txt", "book-mesh.txt", "config.txt")) {
+foreach ($name in @("dev.txt", "dev-unlock.txt", "showcase.txt", "spike.txt", "book-mesh.txt")) {
     if (Test-Path (Join-Path $mod $name)) {
         Write-Host "FAIL: $name is in the mod folder; remove it before release"
         $failed = $true
     }
+}
+# The game writes config.txt on first run; tools\package.ps1 never packs it.
+if (git -C $root ls-files -- "SkillsOfAshenfallHorticulture/config.txt") {
+    Write-Host "FAIL: config.txt is tracked by git"
+    $failed = $true
 }
 foreach ($name in @("Scripts\main.lua", "Textures\horticulture-skill-icon.png", "enabled.txt", "LICENSE", "README.md")) {
     if (-not (Test-Path (Join-Path $mod $name))) {

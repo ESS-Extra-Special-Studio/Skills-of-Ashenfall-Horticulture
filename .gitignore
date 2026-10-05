@@ -17,3 +17,6 @@ Saves/
 Saves.*/
 *.tmp
 *.bak
+
+# Release zips (tools/package.ps1)
+dist/
