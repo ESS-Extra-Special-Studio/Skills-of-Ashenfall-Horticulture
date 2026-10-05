@@ -1,7 +1,9 @@
 -- Skills of Ashenfall: Horticulture, levels 1-25, on ESL:DragonWilds.
 -- Unlocks at Historian 25 and Farming 25 once the character has read the
 -- Observances of Brassica Prime, hidden in a hymnal by the Bramblemead
--- cabbage patch.
+-- cabbage patch. Trained by taking cuttings and grafting them onto crops and
+-- trees the player planted; the hybrids that take are entered in the
+-- Discovery Catalogue.
 local MOD = "Skills of Ashenfall: Horticulture"
 -- Permanent: names every player's save file. Never change it.
 local SKILL = "Horticulture"
@@ -39,6 +41,8 @@ local U = require("horticulture_util")
 local Lore = require("horticulture_lore")
 local Book = require("horticulture_book")
 local Training = require("horticulture_training")
+local Splicing = require("horticulture_splicing")
+local Perks = require("horticulture_perks")
 
 -- dev.txt turns on the developer keys. dev-unlock.txt as well drops the
 -- Historian and Farming requirements, for testing on a fresh character; the
@@ -66,11 +70,8 @@ if DEV_UNLOCK then
         .. ": Historian 25 and Farming 25 are not required in this session. Never ship this file.")
 end
 
-local DEV_PERKS = {
-    { level = 5, name = "[Test] Seed saver", description = "Test row, unlocked at level 5." },
-    { level = 15, name = "[Test] Grafter", description = "Test row, unlocked at level 15." },
-    { level = 25, name = "[Test] Cultivar", description = "Test row, unlocked at level 25." },
-}
+local Settings = require("horticulture_config").Load(dir, log)
+local STATUS_KEY = Settings.status_key
 
 ESL.RegisterSkill({
     id = SKILL,
@@ -81,19 +82,19 @@ ESL.RegisterSkill({
     capXp = 3152,
     maxLevel = 25,
     maxLevelText = "Horticulture 25: all v1.0.0 has to teach",
-    flavour = "Coax new things out of old seed: save it, cross it, graft it and feed the soil.",
-    levelUpText = "Sow, water, feed, cure and harvest your crops to gain Horticulture XP.",
+    flavour = "Take cuttings, graft them onto the crops and trees you planted, and see what grows by dawn.",
+    levelUpText = "Take cuttings and graft them onto your crops and trees to gain Horticulture XP. New hybrids pay the most.",
     panelLabel = "Progress to next level",
-    trainingText = "Every crop you sow, water, compost, cure or harvest pays Horticulture XP. The first harvest of each kind of crop enters it in your Discovery Catalogue for extra XP.",
+    trainingText = "Aim at a plant and press " .. Settings.action_key .. " to take a cutting, then aim at a crop, sapling or tree you planted and press "
+        .. Settings.action_key .. " to graft it. At dawn the graft takes or is rejected; a graft that takes becomes a hybrid, "
+        .. "and each new hybrid enters your Discovery Catalogue. Pick from hybrid trees once a day. Tree cuttings need an axe that can fell the tree, "
+        .. "and never take on a crop. Ordinary farming still pays a little.",
     requires = requires,
-    perks = DEV and DEV_PERKS or {},
+    perks = Perks.Rows(DEV),
 })
 
 -- The world prompt on our own book shows the Historian level it needs.
 ESL.RequireSkill(ESL.HISTORIAN, 25, Lore.PROMPT_NAME)
-
-local Settings = require("horticulture_config").Load(dir, log)
-local STATUS_KEY = Settings.status_key
 
 local config = {
     ESL = ESL,
@@ -105,10 +106,12 @@ local config = {
     forceMesh = FORCE_MESH,
     quiet = Settings.quiet,
     debug = Settings.debug,
+    actionKey = Settings.action_key,
 }
 
 Book.Start(config)
 Training.Start(config)
+Splicing.Start(config)
 
 -- The first level comes from the reading itself, paid once the host's new
 -- skill card has had its moment, so the game's own XP popup and level-up
@@ -143,7 +146,9 @@ RegisterKeyBindAsync(Key[STATUS_KEY], {}, function()
         ESL.Gate(SKILL, { notify = true, title = "Horticulture", skill = SKILL })
         return
     end
-    ESL.ToggleStatus(SKILL, Training.CatalogueLine)
+    ESL.ToggleStatus(SKILL, function()
+        return Splicing.SatchelLine() .. "  |  " .. Splicing.CatalogueLine() .. "  |  " .. Training.CatalogueLine()
+    end)
 end)
 
 RegisterKeyBindAsync(Key[STATUS_KEY], { ModifierKey.SHIFT }, function()
@@ -155,12 +160,13 @@ if SPIKE then
 end
 
 if DEV then
-    require("horticulture_dev").Start(config, Book, Training)
+    require("horticulture_dev").Start(config, Book, Training, Splicing)
     local CTRL_SHIFT = { ModifierKey.CONTROL, ModifierKey.SHIFT }
     RegisterKeyBindAsync(Key.F2, CTRL_SHIFT, function() ESL.TestNotifications(SKILL) end)
     RegisterKeyBindAsync(Key.F3, CTRL_SHIFT, function() ESL.SelectInSkillsMenu(SKILL) end)
 end
 
 log("Loaded " .. VERSION .. ". " .. STATUS_KEY .. " shows Horticulture, Shift+" .. STATUS_KEY
-    .. " rereads the Observances." .. (Settings.quiet and " Quiet mode is on." or "")
+    .. " rereads the Observances, " .. Settings.action_key .. " takes cuttings and grafts (Ctrl+" .. Settings.action_key
+    .. " cutting only, Shift+" .. Settings.action_key .. " next cutting)." .. (Settings.quiet and " Quiet mode is on." or "")
     .. (DEV and " Developer keys on." or ""))

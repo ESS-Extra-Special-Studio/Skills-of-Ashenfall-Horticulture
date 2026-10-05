@@ -25,16 +25,19 @@ local Prize = require("horticulture_prize")
 
 local Training = {}
 
--- Budget: docs/HORTICULTURE_1-25.md (Dragonwilds docs folder).
+-- Splicing is the main source of Horticulture XP; ordinary farming pays
+-- about a third of the 1.0 farming-only rates so a plot round still trains a
+-- little. Budget: tools\budget_sim.py and
+-- docs/HORTICULTURE_SPLICING_REDESIGN.md (Dragonwilds docs folder).
 Training.XP = {
-    plant = 30,
-    water = 15,
-    compost = 30,
-    weed = 10,
-    cure = 40,
-    harvest = 70,
-    firstPlant = 50,
-    firstHarvest = 100,
+    plant = 10,
+    water = 5,
+    compost = 10,
+    weed = 3,
+    cure = 13,
+    harvest = 23,
+    firstPlant = 17,
+    firstHarvest = 33,
 }
 
 local LABEL = {
@@ -195,14 +198,15 @@ local function repeatable(kind, id)
     return ESL.Award(SKILL, id, Training.XP[kind], LABEL[kind])
 end
 
--- The Discovery Catalogue: the first harvest of each kind of crop.
+-- The Vanilla Plants section of the Discovery Catalogue: the first harvest
+-- of each kind of crop.
 local function catalogue(net)
     local ESL, SKILL = cfg.ESL, cfg.SKILL
     local key, name = Crops.Key(net)
     local gain = ESL.Award(SKILL, "firstharvest:" .. key, Training.XP.firstHarvest, LABEL.firstHarvest .. ": " .. name)
     if not gain then return end
     if ESL.ShowCard and not cfg.quiet then
-        ESL.ShowCard(SKILL, "DISCOVERY CATALOGUE", name,
+        ESL.ShowCard(SKILL, "VANILLA PLANTS", name,
             string.format("%d of %d crops catalogued", Training.CatalogueCount(), Crops.TOTAL))
     end
 end
@@ -327,8 +331,8 @@ function Training.CatalogueCount() return #Training.Catalogue() end
 function Training.CatalogueLine()
     local names = {}
     for _, key in ipairs(Training.Catalogue()) do names[#names + 1] = Crops.NameOf(key) end
-    if #names == 0 then return "Discovery Catalogue: no crops yet" end
-    return string.format("Discovery Catalogue %d/%d: %s", #names, Crops.TOTAL, table.concat(names, ", "))
+    if #names == 0 then return "Vanilla Plants: no crops yet" end
+    return string.format("Vanilla Plants %d/%d: %s", #names, Crops.TOTAL, table.concat(names, ", "))
 end
 
 -- For the dev dump.

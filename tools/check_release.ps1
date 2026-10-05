@@ -32,6 +32,9 @@ if (-not (Select-String -Path (Join-Path $mod "Scripts\main.lua") -SimpleMatch '
 if (Select-String -Path (Join-Path $mod "Scripts\horticulture_prize.lua") -SimpleMatch "Prize.ENABLED = true" -Quiet) {
     Write-Host "WARN: prize specimens are on; ship only if step S6 of the test window passed"
 }
+if (Test-Path (Join-Path $mod "meshes.txt")) {
+    Write-Host "WARN: meshes.txt points hybrids at other mesh paths; it is never packed"
+}
 if (Test-Path (Join-Path $mod "placement.txt")) {
     Write-Host "WARN: placement.txt overrides the default book spot; ship it only if it was checked in game"
 }
@@ -40,6 +43,8 @@ $py = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
 & $py (Join-Path $PSScriptRoot "lua_check.py")
 if ($LASTEXITCODE -ne 0) { $failed = $true }
 & $py (Join-Path $PSScriptRoot "training_test.py")
+if ($LASTEXITCODE -ne 0) { $failed = $true }
+& $py (Join-Path $PSScriptRoot "splice_test.py")
 if ($LASTEXITCODE -ne 0) { $failed = $true }
 
 if ($failed) { Write-Host "RELEASE CHECK FAILED"; exit 1 }

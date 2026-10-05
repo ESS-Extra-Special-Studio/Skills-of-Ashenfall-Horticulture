@@ -6,14 +6,17 @@
 -- (ConsoleEnabler), Insert (BPModLoader), Ctrl+R hot reload, Ctrl+O UE4SS GUI,
 -- Ctrl+J, Ctrl+H and Ctrl+Numpad 5-9 (Keybinds), F3 (LineTrace), HOME
 -- (ExampleSkill), F7 and F5/F6/F8/F9/F11 (Historian and its developer keys),
--- F9 (the HUD mod) and F12 (Steam screenshots).
+-- F9 (the HUD mod) and F12 (Steam screenshots). Ctrl+Alt+G belongs to the
+-- studio's internal dev tool only.
 local Config = {}
 
 local FIELDS = {
     { key = "status_key", default = "END", kind = "key",
       help = "Key that shows or hides the Horticulture status line and Discovery Catalogue (a UE4SS key name, such as END or NUM_ONE). Shift and this key rereads the Observances." },
+    { key = "action_key", default = "G", kind = "key",
+      help = "Splicing key. Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto it when it can take it, otherwise takes a cutting. Ctrl and this key always takes a cutting; Shift and this key picks the next cutting in your satchel." },
     { key = "quiet", default = "false", kind = "bool",
-      help = "true hides Horticulture's own cards (Discovery Catalogue entries, the reminder after reading the book). XP and level-up notifications still show." },
+      help = "true hides Horticulture's own cards (cuttings, grafts, Discovery Catalogue entries, the reminder after reading the book). XP and level-up notifications still show." },
     { key = "debug", default = "false", kind = "bool",
       help = "true writes extra detail to UE4SS.log, such as each XP payment and crop name lookup." },
 }
