@@ -19,7 +19,7 @@ BASE = r"""
 local scripts = ...
 package.path = scripts .. "\\?.lua;" .. package.path
 Key = setmetatable({}, { __index = function(_, k) return k end })
-ModifierKey = { CONTROL = "CTRL", SHIFT = "SHIFT" }
+ModifierKey = { CONTROL = "CTRL", SHIFT = "SHIFT", ALT = "ALT" }
 print = function() end
 loops, binds = {}, {}
 function LoopAsync(ms, fn) loops[#loops + 1] = fn end
@@ -375,6 +375,9 @@ g = L.globals()
 potato = g.plot("FPD_Potato", 1, 50)
 ash = g.tree("Ash", True, 300, "sapling")
 g.nearby = L.table_from([potato, ash])
+bound = sorted(str(k) for k in g.binds.keys())
+check("splicing keys are G, Alt+G, Shift+G; none on Ctrl (the game's Evade)",
+      bound == ["ALT+G", "G", "SHIFT+G"], bound)
 
 g.aimed = potato
 g.press("G")
@@ -415,15 +418,15 @@ check("second pick the same day refused", "Already picked today" in c, c)
 cat = g.S.CatalogueLine()
 check("catalogue line", cat == "Hybrids (1/8 flagship): Tuberwood Ash", cat)
 
-# A tree cutting never goes onto a crop; Ctrl+G cuts; axe gating.
+# A tree cutting never goes onto a crop; Alt+G cuts; axe gating.
 g.aimed = g.tree("Ash", False, 900)
 g.axe = None
-g.press("CTRL+G")
+g.press("ALT+G")
 c = g.take("cards")
-check("Ctrl+G on a tree without an axe says why", "NO CUTTING|Hold a logging axe" in c, c)
+check("Alt+G on a tree without an axe says why", "NO CUTTING|Hold a logging axe" in c, c)
 g.axe = 1
-g.press("CTRL+G")
-check("Ctrl+G with a stone axe takes an ash cutting", "Cutting taken=8" in g.take("xp"))
+g.press("ALT+G")
+check("Alt+G with a stone axe takes an ash cutting", "Cutting taken=8" in g.take("xp"))
 g.take("cards")
 g.aimed = ash
 g.press("G")

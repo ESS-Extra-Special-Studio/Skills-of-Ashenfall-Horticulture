@@ -3,8 +3,8 @@
 --
 -- G (action_key): pick from a hybrid if it is ready, else graft the
 -- selected cutting onto the plant you aim at if it can take it, else take a
--- cutting from it. Ctrl+G always takes a cutting. Shift+G picks the next
--- cutting in the satchel.
+-- cutting from it. Alt+G always takes a cutting (Ctrl is the game's Evade).
+-- Shift+G picks the next cutting in the satchel.
 --
 -- v1 runs in single player and for the host of a co-op world; the looks are
 -- local to the host's screen.
@@ -446,7 +446,7 @@ function Splicing.Action()
         if pickWhy then refuse("NOTHING TO PICK", pickWhy) return end
         U.log("CANNOT GRAFT: " .. tostring(why))
         if not cfg.quiet then
-            cfg.ESL.ShowCard(cfg.SKILL, "CANNOT GRAFT", why, "Ctrl+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
+            cfg.ESL.ShowCard(cfg.SKILL, "CANNOT GRAFT", why, "Alt+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
         end
         return
     end
@@ -545,7 +545,7 @@ function Splicing.Start(config)
     U.every(500, "Splicing cards", pump_cards)
     local key = Key[cfg.actionKey]
     RegisterKeyBindAsync(key, {}, function() U.game(Splicing.Action) end)
-    RegisterKeyBindAsync(key, { ModifierKey.CONTROL }, function() U.game(Splicing.TakeCutting) end)
+    RegisterKeyBindAsync(key, { ModifierKey.ALT }, function() U.game(Splicing.TakeCutting) end)
     RegisterKeyBindAsync(key, { ModifierKey.SHIFT }, function() U.game(Splicing.Cycle) end)
 end
 

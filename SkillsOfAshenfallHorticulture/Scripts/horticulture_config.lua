@@ -14,7 +14,7 @@ local FIELDS = {
     { key = "status_key", default = "END", kind = "key",
       help = "Key that shows or hides the Horticulture status line and Discovery Catalogue (a UE4SS key name, such as END or NUM_ONE). Shift and this key rereads the Observances." },
     { key = "action_key", default = "G", kind = "key",
-      help = "Splicing key. Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto it when it can take it, otherwise takes a cutting. Ctrl and this key always takes a cutting; Shift and this key picks the next cutting in your satchel." },
+      help = "Splicing key. Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto it when it can take it, otherwise takes a cutting. Alt and this key always takes a cutting; Shift and this key picks the next cutting in your satchel." },
     { key = "quiet", default = "false", kind = "bool",
       help = "true hides Horticulture's own cards (cuttings, grafts, Discovery Catalogue entries, the reminder after reading the book). XP and level-up notifications still show." },
     { key = "debug", default = "false", kind = "bool",

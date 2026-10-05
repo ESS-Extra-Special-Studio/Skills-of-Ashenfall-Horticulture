@@ -167,6 +167,6 @@ if DEV then
 end
 
 log("Loaded " .. VERSION .. ". " .. STATUS_KEY .. " shows Horticulture, Shift+" .. STATUS_KEY
-    .. " rereads the Observances, " .. Settings.action_key .. " takes cuttings and grafts (Ctrl+" .. Settings.action_key
+    .. " rereads the Observances, " .. Settings.action_key .. " takes cuttings and grafts (Alt+" .. Settings.action_key
     .. " cutting only, Shift+" .. Settings.action_key .. " next cutting)." .. (Settings.quiet and " Quiet mode is on." or "")
     .. (DEV and " Developer keys on." or ""))

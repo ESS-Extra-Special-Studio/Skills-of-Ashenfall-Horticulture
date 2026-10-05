@@ -96,7 +96,7 @@ End shows your satchel, the hybrids you have found and the **Vanilla Plants** se
 | Key | Does |
 |-----|------|
 | G | Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto a plant you grew, otherwise takes a cutting |
-| Ctrl+G | Always takes a cutting from what you aim at |
+| Alt+G | Always takes a cutting from what you aim at |
 | Shift+G | Selects the next cutting in your satchel |
 | End | Shows Horticulture's level, XP, satchel and Discovery Catalogue, or what is still needed to unlock it |
 | Shift+End | Rereads the Observances of Brassica Prime |
@@ -106,7 +106,7 @@ The first run writes `config.txt` next to `enabled.txt`:
 | Setting | Default | Does |
 |---------|---------|------|
 | `status_key` | `END` | The key above, by its UE4SS key name (for example `PAGE_DOWN` or `NUM_ZERO`). Shift with the same key rereads the book. |
-| `action_key` | `G` | The splicing key, by its UE4SS key name. Ctrl and Shift with it take a cutting and select the next one. |
+| `action_key` | `G` | The splicing key, by its UE4SS key name. Alt and Shift with it take a cutting and select the next one. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |
 
