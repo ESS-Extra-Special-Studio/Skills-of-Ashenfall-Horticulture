@@ -49,7 +49,6 @@ local bookFor = nil
 local spawnFailures = 0
 local lastTargeted = -1
 local lastSignal = -1
-local promptNamed = {}
 local entryProp = nil
 local entryPropChecked = false
 local clone = nil
@@ -320,27 +319,19 @@ local function is_book(actor)
     return U.valid(book) and U.valid(actor) and U.full(actor) == U.full(book)
 end
 
-local function rename_prompt(prompt)
+-- The prompt's name is left to the game: lore items redraw "Lore" every
+-- frame, so writing our name into it only made the prompt flicker. ESL shows
+-- the Historian requirement from the actor's DisplayName instead.
+local function note_target(prompt)
     local target = nil
     pcall(function() target = prompt.CurrentWorldActor end)
-    if not is_book(target) then return end
-    lastTargeted = now()
-    local nameBlock = nil
-    pcall(function() nameBlock = prompt.ItemNameTextBlock end)
-    if U.valid(nameBlock) and U.text(nameBlock) ~= Lore.PROMPT_NAME then
-        local was = U.text(nameBlock)
-        U.set_text(nameBlock, Lore.PROMPT_NAME)
-        if not promptNamed[tostring(was)] then
-            promptNamed[tostring(was)] = true
-            U.log("Book prompt renamed from \"" .. tostring(was) .. "\"")
-        end
-    end
+    if is_book(target) then lastTargeted = now() end
 end
 
 local function watch_prompt()
     if not U.valid(book) then return end
     for _, prompt in ipairs(U.live_of("WBP_HUD_InteractionPrompt_C")) do
-        rename_prompt(prompt)
+        note_target(prompt)
     end
 end
 
