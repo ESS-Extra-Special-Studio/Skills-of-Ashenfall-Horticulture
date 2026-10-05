@@ -30,6 +30,10 @@ local LORE_ITEM = "/Game/Gameplay/World/Misc/BP_LoreItem.BP_LoreItem_C"
 local BOOK_MESH = "/Game/Art/Env/Props/Gameplay_Props/Lore_Book/SM_Lore_Book_01.SM_Lore_Book_01"
 local PREFERRED_TEMPLATE = "JOURNAL_Know_LoreScrap_C4"
 
+-- The lore book model is small and flat; at ground level the meadow grass
+-- around the cabbage patch hides it.
+local BOOK_LIFT = 12
+local BOOK_SCALE = 1.75
 local SPAWN_RANGE = 15000
 local READ_RANGE = 300
 local TARGET_GRACE = 0.6
@@ -190,7 +194,7 @@ local function spot()
         U.log(string.format("Book ground found at z %.0f by line trace", groundZ))
         z = groundZ
     end
-    return { X = p.x, Y = p.y, Z = z + 2 }, { Pitch = 0, Yaw = p.yaw or 0, Roll = 0 }
+    return { X = p.x, Y = p.y, Z = z + BOOK_LIFT }, { Pitch = 0, Yaw = p.yaw or 0, Roll = 0 }
 end
 
 local function load_object(path)
@@ -227,6 +231,8 @@ local function configure(actor)
     pcall(function()
         if actor:HasAuthority() then actor:SetReplicates(false) end
     end)
+    pcall(function() actor.DisplayName = FText(Lore.PROMPT_NAME) end)
+    pcall(function() actor:SetActorScale3D({ X = BOOK_SCALE, Y = BOOK_SCALE, Z = BOOK_SCALE }) end)
     if bookMode == "loreitem" then
         local prop = find_entry_property(actor)
         local template = prop and template_entry()
@@ -314,24 +320,27 @@ local function is_book(actor)
     return U.valid(book) and U.valid(actor) and U.full(actor) == U.full(book)
 end
 
+local function rename_prompt(prompt)
+    local target = nil
+    pcall(function() target = prompt.CurrentWorldActor end)
+    if not is_book(target) then return end
+    lastTargeted = now()
+    local nameBlock = nil
+    pcall(function() nameBlock = prompt.ItemNameTextBlock end)
+    if U.valid(nameBlock) and U.text(nameBlock) ~= Lore.PROMPT_NAME then
+        local was = U.text(nameBlock)
+        U.set_text(nameBlock, Lore.PROMPT_NAME)
+        if not promptNamed[tostring(was)] then
+            promptNamed[tostring(was)] = true
+            U.log("Book prompt renamed from \"" .. tostring(was) .. "\"")
+        end
+    end
+end
+
 local function watch_prompt()
     if not U.valid(book) then return end
     for _, prompt in ipairs(U.live_of("WBP_HUD_InteractionPrompt_C")) do
-        local target = nil
-        pcall(function() target = prompt.CurrentWorldActor end)
-        if is_book(target) then
-            lastTargeted = now()
-            local nameBlock = nil
-            pcall(function() nameBlock = prompt.ItemNameTextBlock end)
-            if U.valid(nameBlock) and U.text(nameBlock) ~= Lore.PROMPT_NAME then
-                local was = U.text(nameBlock)
-                U.set_text(nameBlock, Lore.PROMPT_NAME)
-                if not promptNamed[tostring(was)] then
-                    promptNamed[tostring(was)] = true
-                    U.log("Book prompt renamed from \"" .. tostring(was) .. "\"")
-                end
-            end
-        end
+        rename_prompt(prompt)
     end
 end
 
