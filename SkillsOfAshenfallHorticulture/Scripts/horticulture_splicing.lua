@@ -182,7 +182,7 @@ local function host_of(g, list)
     for _, c in ipairs(list) do
         if g.kind == "plot" and c.kind == "plot" then
             if (g.key and c.key == g.key) or (not g.key and Core.GraftOn({ grafts = { g } }, as_point(c))) then return c end
-        elseif g.kind ~= "plot" and c.kind ~= "plot" then
+        elseif g.kind ~= "plot" and c.kind ~= "plot" and c.kind ~= "wild" then
             if Core.GraftOn({ grafts = { g } }, as_point(c)) then return c end
         end
     end
@@ -357,9 +357,12 @@ local function ready()
 end
 
 local function source_of(c)
-    local src = { species = c.species, kind = c.kind == "plot" and "crop" or "tree", level = level(), alive = c.alive }
+    local crop = c.kind == "plot" or c.kind == "wild"
+    local src = { species = c.species, kind = crop and "crop" or "tree", level = level(), alive = c.alive }
     if c.kind == "plot" then
         src.key = c.key
+    elseif c.kind == "wild" then
+        src.key = string.format("wild:%s@%d,%d", tostring(c.species), math.floor(c.loc.X / 300), math.floor(c.loc.Y / 300))
     else
         src.key = string.format("%s@%.0f,%.0f", tostring(c.species), c.loc.X, c.loc.Y)
         if Rules.IsTree(c.species) then src.axePower = World.HeldAxe() end
@@ -424,7 +427,7 @@ function Splicing.Action()
         refuse("HORTICULTURE", "Aim at a crop, sapling or tree within reach")
         return
     end
-    local g = c.kind ~= "stump" and Core.GraftOn(st, as_point(c)) or nil
+    local g = c.kind ~= "stump" and c.kind ~= "wild" and Core.GraftOn(st, as_point(c)) or nil
     if g and g.state == "hybrid" and g.kind ~= "plot" then
         local ok, why = Core.CanPick(st, g)
         if ok then pick(g) return end

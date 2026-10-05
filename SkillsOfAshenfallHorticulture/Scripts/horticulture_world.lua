@@ -20,8 +20,10 @@ local Rules = require("horticulture_splice_rules")
 
 local World = {}
 
-local REACH = { plot = 450, sapling = 500, tree = 750 }
-local RADIUS = { plot = 90, sapling = 70, tree = 160 }
+local REACH = { plot = 450, sapling = 500, tree = 750, wild = 400 }
+local RADIUS = { plot = 90, sapling = 70, tree = 160, wild = 60 }
+local WILD_CLASSES = { "GatherableResource", "HarvestableResource" }
+local PROMPT = "WBP_HUD_InteractionPrompt_C"
 local SCAN = 2000
 local TIME_LIB = "/Script/Dominion.Default__InGameTimeFunctionLibrary"
 local RUNTIME_LIB = "/Script/Dominion.Default__DominionRuntimeBlueprintLibrary"
@@ -32,12 +34,39 @@ local SPECIES_WORDS = {
     { "yew", "Yew" }, { "oak", "Oak" }, { "ash", "Ash" },
 }
 
+local CROP_WORDS = {
+    { "cabbage", "FPD_Cabbage" }, { "potato", "FPD_Potato" }, { "wheat", "FPD_Wheat" },
+    { "redberry", "FPD_Redberry" }, { "redberries", "FPD_Redberry" }, { "berry_bush", "FPD_Redberry" },
+    { "flax", "FPD_Flax" }, { "onion", "FPD_Onion" }, { "tomato", "FPD_Tomato" },
+    { "harralander", "FPD_Harralander" }, { "marrentill", "FPD_Marrentill" }, { "marentill", "FPD_Marrentill" },
+    { "kwuarm", "FPD_Kwuarm" }, { "dwellberry", "FPD_Dwellberry" }, { "dwellberries", "FPD_Dwellberry" },
+}
+
+local function words(name)
+    return "_" .. tostring(name or ""):lower():gsub("[^%a%d]", "_") .. "_"
+end
+
+local function has_word(s, w)
+    return s:find("_" .. w .. "_", 1, true) or s:find("_" .. w .. "%d") or s:find("_" .. w .. "e?s_")
+end
+
 -- Tree species from names such as BP_FellableTree_Oak_C or
 -- SM_FH_Ash_Tree_01, matched as whole words.
 function World.SpeciesFromName(name)
-    local s = "_" .. tostring(name or ""):lower():gsub("[^%a%d]", "_") .. "_"
+    local s = words(name)
     for _, w in ipairs(SPECIES_WORDS) do
         if s:find("_" .. w[1] .. "_", 1, true) or s:find("_" .. w[1] .. "%d") then return w[2] end
+    end
+    return nil
+end
+
+-- Crop key from names such as BP_Gatherable_Potato_C or a prompt's
+-- "Potato Plant". Seeds are not plants.
+function World.CropFromName(name)
+    local s = words(name)
+    if s:find("_seed", 1, true) then return nil end
+    for _, w in ipairs(CROP_WORDS) do
+        if has_word(s, w[1]) then return w[2] end
     end
     return nil
 end
@@ -159,7 +188,23 @@ local function tree_info(actor)
     return { kind = "tree", obj = actor, actor = actor, loc = loc, species = species, alive = true, planted = prop(actor, "bIsFarmingTree") == true }
 end
 
--- Every plot, sapling and tree within range of a point.
+-- A wild crop plant (a gatherable potato, the cabbages of Bramblemead): a
+-- source of cuttings, never a host.
+local function wild_info(actor)
+    local loc = U.location(actor)
+    if not loc then return nil end
+    local species = nil
+    for _, n in ipairs(class_names(actor)) do
+        species = species or World.CropFromName(n)
+    end
+    if not species then
+        for _, n in ipairs(mesh_names(actor)) do species = species or World.CropFromName(n) end
+    end
+    if not species then return nil end
+    return { kind = "wild", obj = actor, actor = actor, loc = loc, species = species, alive = true, planted = false }
+end
+
+-- Every plot, sapling, tree and wild crop plant within range of a point.
 function World.Nearby(center, range)
     local out = {}
     range = range or SCAN
@@ -181,7 +226,39 @@ function World.Nearby(center, range)
             if t then out[#out + 1] = t end
         end
     end
+    if range <= 1500 then
+        for _, cls in ipairs(WILD_CLASSES) do
+            for _, a in ipairs(U.live_of(cls)) do
+                local loc = U.location(a)
+                if loc and U.dist(loc, center) <= range then
+                    local w = wild_info(a)
+                    if w then out[#out + 1] = w end
+                end
+            end
+        end
+    end
     return out
+end
+
+-- The interaction prompt the game shows for what the player looks at, when
+-- it names a crop ("Potato", "Cabbage"): wild plants drawn as foliage have
+-- no actor of their own until the game makes one for the prompt.
+function World.PromptCrop(me)
+    for _, prompt in ipairs(U.live_of(PROMPT)) do
+        if U.visible(prompt) then
+            local block = prop(prompt, "ItemNameTextBlock")
+            local text = U.valid(block) and U.text(block) or nil
+            local species = text and World.CropFromName(text)
+            if species then
+                local actor = prop(prompt, "CurrentWorldActor")
+                local loc = U.valid(actor) and U.location(actor) or nil
+                if loc and U.dist2d(loc, me) > REACH.wild then loc = nil end
+                U.log_once("prompt" .. species, "Wild " .. species .. " seen through the prompt \"" .. text .. "\" (" .. U.full(actor) .. ")")
+                return { kind = "wild", obj = actor, actor = actor, loc = loc or me, species = species, alive = true, planted = false, prompt = text }
+            end
+        end
+    end
+    return nil
 end
 
 -- Camera position and look direction.
@@ -219,7 +296,7 @@ function World.Pick(candidates, eye, dir, me)
     for _, c in ipairs(candidates) do
         local kind = c.kind == "stump" and "tree" or c.kind
         if U.dist2d(c.loc, me) <= (REACH[kind] or 500) then
-            local lift = kind == "tree" and 150 or (kind == "sapling" and 40 or 10)
+            local lift = kind == "tree" and 150 or ((kind == "sapling" or kind == "wild") and 30 or 10)
             local tx, ty, tz = c.loc.X - eye.X, c.loc.Y - eye.Y, c.loc.Z + lift - eye.Z
             local along = tx * dir.X + ty * dir.Y + tz * dir.Z
             if along > 0 then
@@ -249,7 +326,11 @@ function World.Aimed()
     if not me then return nil end
     local eye, dir = World.Camera()
     if not eye then return nil end
-    return World.Pick(World.Nearby(me, 1000), eye, dir, me)
+    local best = World.Pick(World.Nearby(me, 1000), eye, dir, me)
+    -- Something the player grew wins; otherwise a crop the game's own
+    -- prompt names, then whatever the camera points at.
+    if best and (best.kind == "plot" or best.planted) then return best end
+    return World.PromptCrop(me) or best
 end
 
 -- The axe in the player's hand: its power, item name and how it was read.

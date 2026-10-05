@@ -235,6 +235,12 @@ names = [("BP_FellableTree_Oak_C", "Oak"), ("SM_FH_Ash_Tree_01", "Ash"), ("BP_Sa
 for n_, want in names:
     got = W.SpeciesFromName(n_)
     check("species from " + n_, got == want, got)
+crops = [("BP_Gatherable_Potato_C", "FPD_Potato"), ("Potato", "FPD_Potato"), ("Cabbage Plant", "FPD_Cabbage"),
+         ("SM_Redberry_Bush_01", "FPD_Redberry"), ("Potato Seeds", None), ("ITEM_Farming_Seed_Potato", None),
+         ("BP_Spawner_Onion_C", "FPD_Onion"), ("Wheat", "FPD_Wheat"), ("Ash Logs", None), ("Potatoes", "FPD_Potato")]
+for n_, want in crops:
+    got = W.CropFromName(n_)
+    check("crop from " + n_, got == want, got)
 check("dawn passed 5:50 -> 6:10", W.PassedDawn(5.8, 6.2) is True)
 check("dawn not passed 6:10 -> 9:00", W.PassedDawn(6.2, 9.0) is False)
 check("sleep 22:00 -> 7:00 passes dawn", W.PassedDawn(22.0, 7.0) is True)
@@ -442,6 +448,25 @@ for _ in range(3):
     g.tick()
 c = g.take("cards")
 check("HYBRID HARVEST card", "HYBRID HARVEST|Brassitato|" in c, c)
+
+# A wild potato is a source, never a host.
+os.remove(save)
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+g = L.globals()
+wild = L.eval('function() return { kind = "wild", species = "FPD_Potato", alive = true, planted = false, loc = { X = 40, Y = 0, Z = 0 } } end')()
+ash = g.tree("Ash", True, 300, "sapling")
+g.nearby = L.table_from([wild, ash])
+g.aimed = wild
+g.press("G")
+check("G on a wild potato takes a cutting", "Cutting taken=8" in g.take("xp"))
+g.take("cards")
+g.press("G")
+c = g.take("cards")
+check("a wild potato is not a host", "NO CUTTING|" in c and "GRAFT MADE" not in c, c)
+g.aimed = ash
+g.press("G")
+check("wild potato cutting grafts onto a planted ash", "Graft made=20" in g.take("xp"))
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):
