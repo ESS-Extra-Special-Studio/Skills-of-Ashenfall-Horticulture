@@ -166,7 +166,7 @@ local function discover(g)
         local n = flagship_count()
         card("DISCOVERY CATALOGUE", string.upper(name) .. " DISCOVERED",
             string.format("%s %d of %d flagship hybrids.", f.detail, n, Rules.FLAGSHIP_TOTAL), 7)
-        card(name, f.lore, "From the Discovery Catalogue (End).", 6)
+        card("FROM THE DISCOVERY CATALOGUE", name, f.lore, 7)
     else
         card("HYBRID RECORDED", name,
             string.format("%s onto %s. Gives %s.", Rules.Name(g.scion), Rules.Name(g.host):lower(), Rules.Name(g.scion):lower()), 5)
@@ -336,9 +336,10 @@ local function primelet_born(o)
     local gain = cfg.ESL.Award(cfg.SKILL, "hybrid:" .. Rules.PRIMELET.id, Rules.XP.primelet, Rules.PRIMELET.name .. " discovered")
     if gain then
         card("DISCOVERY CATALOGUE", "SECRET ENTRY: " .. string.upper(Rules.PRIMELET.name), R.catalogue, 7)
-        card(Rules.PRIMELET.name, R.lore, howto, 10)
+        card(Rules.PRIMELET.name, "The Observances", R.lore, 10)
+        card("KEEPING A PRIMELET", Rules.PRIMELET.name, howto, 9)
     else
-        card(Rules.PRIMELET.name, "Another one. The cabbages are, it seems, talking.", howto, 8)
+        card(Rules.PRIMELET.name, "Another one", "The cabbages are, it seems, talking. " .. howto, 9)
     end
     vfx_at({ X = p.x, Y = p.y, Z = (p.z or 0) + 40 })
     U.log(string.format("Brassica Primelet %s from graft %s at %.0f, %.0f (world %s)", p.id, g.id, p.x, p.y, tostring(p.world)))

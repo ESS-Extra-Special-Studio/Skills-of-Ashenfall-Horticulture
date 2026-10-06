@@ -589,7 +589,9 @@ check("dawn: graft took (+45)", "Graft took=45" in x, x)
 check("Tuberwood Ash discovered once (+200)", "hybrid:TuberwoodAsh=200" in a, a)
 check("TUBERWOOD ASH DISCOVERED reveal card", "DISCOVERY CATALOGUE|TUBERWOOD ASH DISCOVERED|" in c and "1 of 8 flagship" in c, c)
 check("never the game's Farming & Fishing card", "Farming" not in c and "Fishing" not in c, "")
-check("lore card follows", "Tuberwood Ash|An ash that has decided" in c, c)
+check("lore card follows", "FROM THE DISCOVERY CATALOGUE|Tuberwood Ash|An ash that has decided" in c, c)
+titles = [card.split("|")[1] for card in c.split(" ; ") if card.count("|") >= 2]
+check("hybrid card titles fit on one line", titles and max(len(t) for t in titles) <= 40, titles)
 g.tick()
 check("hybrid look applied", "g1:hybrid:TuberwoodAsh" in g.take("applied"))
 g.aimed = ash
@@ -710,7 +712,10 @@ a = g.take("awards")
 c = g.take("cards")
 check("Primelet reveal: secret catalogue entry and XP", "hybrid:BrassicaPrimelet=200" in a, a)
 check("Primelet reveal cards in order", c.find("SOMETHING HAS HAPPENED|BRASSICA PRIMELET") >= 0
-      and c.find("SOMETHING HAS HAPPENED") < c.find("SECRET ENTRY: BRASSICA PRIMELET") < c.find("Brassica Primelet|The Observances"), c)
+      and c.find("SOMETHING HAS HAPPENED") < c.find("SECRET ENTRY: BRASSICA PRIMELET") < c.find("Brassica Primelet|The Observances")
+      < c.find("KEEPING A PRIMELET|Brassica Primelet|Tend it once a day"), c)
+titles = [card.split("|")[1] for card in c.split(" ; ") if card.count("|") >= 2]
+check("reveal card titles fit on one line", titles and max(len(t) for t in titles) <= 40, titles)
 ap = g.take("applied")
 check("Primelet drawn beside the plot", "prime:p" in ap and ":140,0,0.80" in ap, ap)
 check("catalogue lists the secret entry once found", "Brassica Primelet (secret)" in g.S.CatalogueLine(), g.S.CatalogueLine())
