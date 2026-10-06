@@ -564,8 +564,10 @@ end
 -- Vanilla Farming XP through the game's own
 -- SkillComponent:AddXpFromEvent(XPEventRowHandle, ContextString, Multiplier,
 -- bIgnoreModifier) with DT_XPEvents_Farming's Harvesting row (8 XP), so the
--- game's level-up runs as for any harvest. Returns the XP the skill shows
--- afterwards minus before (nil when it could not be read or called).
+-- game's level-up runs as for any harvest. The skill's CurrentXp only shows
+-- the grant a frame later (seen in game: 3272 stays 3272 straight after the
+-- call, 3280 by the next pick). Returns the amount asked once the call went
+-- through, nil when it could not be made.
 local FARMING_ID = "PyUi-0LU_riFY46AnnFiWg"
 local XP_TABLE = "/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Farming.DT_XPEvents_Farming"
 local function farming_xp(sc)
@@ -601,10 +603,8 @@ function World.AddFarmingXp(amount, context)
         U.log_once("addxp", "AddXpFromEvent failed: " .. tostring(err))
         return nil
     end
-    local after = farming_xp(sc)
-    U.log(string.format("Farming XP via AddXpFromEvent: asked %d, %s -> %s", amount, tostring(before), tostring(after)))
-    if before and after then return after - before end
-    return nil
+    U.log(string.format("Farming XP via AddXpFromEvent: +%d (Farming XP was %s)", amount, tostring(before)))
+    return amount
 end
 
 -- True while the player is in plain gameplay: no build menu, inventory or
