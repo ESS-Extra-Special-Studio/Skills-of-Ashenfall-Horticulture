@@ -7,9 +7,9 @@
 --     schema = "ess.fruit_layers/1",
 --     layers = {
 --       { host = "/Game/.../SM_Ash_Tree_01",          -- host mesh key
---         produce = "Potato",                          -- scion id (generic combos)
---         -- or hybrid = "tuberwood_ash",             -- one hybrid (wins over produce)
---         asset = "/Game/Mods/SoAHorticulture/FruitLayers/SM_FL_Ash01_Potato.SM_FL_Ash01_Potato",
+--         produce = "FPD_Redberry",                    -- scion id (generic combos)
+--         -- or hybrid = "TuberwoodAsh",              -- one hybrid (wins over produce)
+--         asset = "/Game/Mods/SoAHorticulture/FruitLayers/SM_FL_Ash01_Redberry.SM_FL_Ash01_Redberry",
 --         cull_distance_cm = 9000,                     -- optional
 --         material_overrides = { ... },                -- optional, as in placement data
 --       },

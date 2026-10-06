@@ -1175,7 +1175,7 @@ fs = L.eval(r"""function(scripts)
     return table.concat({ tostring(ok), F.File(), F.Count(), n(flag), n(gen), n(sap), n(none) }, "|")
 end""")(SCRIPTS)
 check("fruit layers: shipped manifest (264 entries) resolves flagship, generic produce and sapling; uncovered host falls back",
-      fs == "true|hort_fruit_layers_v002|264|SM_FL_Ash01_TuberwoodAsh@9000|SM_FL_Ash01_Redberry@9000|SM_FL_WillowSap01_Kwuarm@5000|nil", fs)
+      fs == "true|hort_fruit_layers_v003|264|SM_FL_Ash01_TuberwoodAsh@9000|SM_FL_Ash01_Redberry@9000|SM_FL_WillowSap01_Kwuarm@5000|nil", fs)
 check("sway: no wind readable, nothing touched", sw[6] == "nowind 0", sw[6])
 check("sway: anchor rotation is host yaw then tilt", sw[7] == "compose 0.50 90.00 0.00" or sw[7] == "compose 0.50 90.00 -0.00", sw[7])
 print("  info: sway reach at 6 m", sw[8], "| pure Lua per tree update (us):", sw[9])

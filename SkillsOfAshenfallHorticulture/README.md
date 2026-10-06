@@ -33,7 +33,7 @@ SkillsOfAshenfallHorticulture : 1
 
 If `Binaries\Win64\ue4ss\Mods\mods.txt` names one of these mods, that line wins over `enabled.txt`: `: 0` there keeps the mod off.
 
-The folder also holds the mod's own pak, `SoAHorticulture_P.pak`, `.ucas` and `.utoc` (about 23 MB): the stalks hybrid fruit hangs from, the Primelets' faces, and fruit baked onto each ash, oak and willow tree shape so it sways with the branches. The game loads it from `~mods` by itself. Keep the three files together beside `Scripts`. Without them Horticulture still works: fruit sits against the bark instead of hanging from a stalk, and the Primelets have no faces.
+The folder also holds the mod's own pak, `SoAHorticulture_P.pak`, `.ucas` and `.utoc` (about 28 MB): the stalks hybrid fruit hangs from, the Primelets' faces, and fruit baked onto each ash, oak and willow tree shape so it sways with the branches. The game loads it from `~mods` by itself. Keep the three files together beside `Scripts`. Without them Horticulture still works: fruit sits against the bark instead of hanging from a stalk, and the Primelets have no faces.
 
 ## Unlocking Horticulture
 
