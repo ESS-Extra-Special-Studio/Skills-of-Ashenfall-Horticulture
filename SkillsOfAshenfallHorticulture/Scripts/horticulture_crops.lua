@@ -181,9 +181,23 @@ end
 
 local stateWay = nil
 
+-- False for a plot still on the build cursor (BuildingPiece bIsPreview or
+-- bIsGhosted): it is not a plot yet, so it is never a host or a source.
+function Crops.Placed(slot)
+    if not U.valid(slot) then return false end
+    local owner = nil
+    pcall(function() owner = slot:GetOwner() end)
+    if not U.valid(owner) then return true end
+    local preview, ghost = false, false
+    pcall(function() preview = owner.bIsPreview == true end)
+    pcall(function() ghost = owner.bIsGhosted == true end)
+    return not (preview or ghost)
+end
+
 -- { stage (EFarmPlotStage), growth, water, fert, net } or nil. net is the
 -- network id when VisibleState is readable, else the FPD_ asset name.
 function Crops.PlotState(slot)
+    if not Crops.Placed(slot) then return nil end
     if stateWay ~= "mesh" then
         local ok, st = pcall(function()
             local v = slot.VisibleState

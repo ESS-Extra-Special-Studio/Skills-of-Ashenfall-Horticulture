@@ -139,6 +139,7 @@ local function plot_key(slot, loc)
 end
 
 local function plot_info(slot)
+    if not Crops.Placed(slot) then return nil end
     local loc = slot_location(slot)
     if not loc then return nil end
     local st = Crops.PlotState(slot)

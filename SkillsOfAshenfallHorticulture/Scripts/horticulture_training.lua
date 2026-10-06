@@ -151,7 +151,7 @@ end
 local function rescan(me)
     local list = {}
     for _, slot in ipairs(U.live_of("FarmSlotComponent")) do
-        local loc = slot_location(slot)
+        local loc = Crops.Placed(slot) and slot_location(slot)
         if loc and U.dist(loc, me) <= SCAN_RANGE then
             list[#list + 1] = { obj = slot, key = U.full(slot), loc = loc }
         end

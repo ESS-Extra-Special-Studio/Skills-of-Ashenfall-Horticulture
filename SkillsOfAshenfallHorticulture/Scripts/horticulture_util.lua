@@ -46,12 +46,76 @@ function U.game(fn)
     if ExecuteInGameThread then ExecuteInGameThread(wrapped) else wrapped() end
 end
 
+-- True while the local player is placing a building, and for a moment after.
+-- The first time a piece is picked in the build menu the game streams its
+-- class in; any of our periodic work in those frames crashed the game inside
+-- UE4SS (UE4SS.dll+0x2ace27, a null read under UStruct::FindProperty), so
+-- U.every holds every task until building is over.
+local BUILD_GRACE = 3
+local BUILD_POLL = 0.2
+local BUILD_SEARCH = 5
+local building = { comp = nil, at = -math.huge, on = false, until_ = -math.huge, said = nil, searched = -math.huge }
+
+local function build_component()
+    if U.valid(building.comp) then return building.comp end
+    building.comp = nil
+    local holders = { U.pawn(), U.pc() }
+    for _, holder in ipairs(holders) do
+        pcall(function()
+            local c = holder.BuildModeComponent
+            if U.valid(c) then building.comp = c end
+        end)
+        if building.comp then return building.comp end
+    end
+    if os.clock() - building.searched < BUILD_SEARCH or not FindAllOf then return nil end
+    building.searched = os.clock()
+    local mine = {}
+    for _, h in ipairs(holders) do mine[U.full(h)] = true end
+    for _, c in ipairs(FindAllOf("BuildModeComponent") or {}) do
+        local owner = nil
+        pcall(function() owner = c:GetOwner() end)
+        if U.valid(c) and owner and mine[U.full(owner)] then
+            building.comp = c
+            U.log_once("buildcomp", "Build mode read from " .. U.full(c))
+            return c
+        end
+    end
+    return nil
+end
+
+local function build_mode_on(comp)
+    local flag, mode = nil, nil
+    pcall(function() flag = comp.bIsBuildMode end)
+    pcall(function() mode = comp.CurrentBuildMode end)
+    mode = tonumber(mode)
+    local on = flag == true or (flag == nil and mode ~= nil and mode ~= 0)
+    local seen = tostring(flag) .. "/" .. tostring(mode)
+    if seen ~= building.said then
+        building.said = seen
+        U.log("Build mode " .. (on and "on" or "off") .. " (bIsBuildMode " .. tostring(flag)
+            .. ", CurrentBuildMode " .. tostring(mode) .. "): periodic work " .. (on and "held" or "resumes"))
+    end
+    return on
+end
+
+function U.Building()
+    local t = os.clock()
+    if t - building.at >= BUILD_POLL then
+        building.at = t
+        local comp = build_component()
+        building.on = comp ~= nil and build_mode_on(comp)
+        if building.on then building.until_ = t + BUILD_GRACE end
+    end
+    return building.on or t < building.until_
+end
+
 -- Runs fn every ms milliseconds, on the game thread when UE4SS can loop there.
 -- Queuing game-thread work from LoopAsync's thread many times a second can
 -- corrupt UE4SS's callback references, so the fallback skips a beat while the
 -- previous one is still queued.
 function U.every(ms, name, fn)
     local function run()
+        if U.Building() then return end
         local ok, err = pcall(fn)
         if not ok then U.log_once(name .. tostring(err), name .. " failed: " .. tostring(err)) end
     end
