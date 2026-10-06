@@ -573,11 +573,30 @@ function World.Facing()
     return { X = loc.X, Y = loc.Y, Z = loc.Z - half }, yaw
 end
 
+-- Ground height at x, y near nearZ (a short trace, so tree canopies above
+-- are not hit); nearZ when nothing is hit.
+function World.GroundAt(x, y, nearZ)
+    local z = nil
+    pcall(function()
+        local ksl = UEHelpers.GetKismetSystemLibrary()
+        local pawn = U.pawn()
+        if not (U.valid(ksl) and pawn) then return end
+        local hit, color = {}, { R = 0, G = 0, B = 0, A = 0 }
+        if ksl:LineTraceSingle(pawn, { X = x, Y = y, Z = nearZ + 250 }, { X = x, Y = y, Z = nearZ - 400 },
+            0, false, {}, 0, hit, true, color, color, 0.0) then
+            pcall(function() z = hit.ImpactPoint.Z end)
+            if not z then pcall(function() z = hit.Location.Z end) end
+        end
+    end)
+    return z or nearZ
+end
+
 -- Which world save is loaded, so a Primelet set down in one world does not
--- appear in another. Read from the game's world-save settings; "?" when
--- they cannot be read (then Primelets show in every world).
-local WORLD_HOLDERS = { "GameInstance", "GameStateBase", "GameModeBase", "SpudSubsystem" }
-local WORLD_FIELDS = { "SaveSlotName", "SlotName", "WorldName", "WorldSaveGuid" }
+-- appear in another. Read from the game state's WorldInfo (the world's id,
+-- else its name), then world-save settings; "?" when none can be read (then
+-- Primelets show in every world).
+local WORLD_HOLDERS = { "GameStateBase", "GameInstance", "GameModeBase", "SpudSubsystem" }
+local WORLD_FIELDS = { "WorldId", "WorldName", "SaveSlotName", "SlotName", "WorldSaveGuid" }
 local worldKey, worldKeyFrom = nil, nil
 
 local function text_of(v)
@@ -585,6 +604,12 @@ local function text_of(v)
     pcall(function() s = v:ToString() end)
     if s == nil and type(v) == "string" then s = v end
     if s == nil and type(v) == "number" then s = tostring(v) end
+    if s == nil then
+        pcall(function()
+            if v.A ~= nil then s = string.format("%08x%08x%08x%08x", v.A % 2^32, v.B % 2^32, v.C % 2^32, v.D % 2^32) end
+        end)
+        if s == "00000000000000000000000000000000" then s = nil end
+    end
     if s and s ~= "" and s ~= "None" then return s end
     return nil
 end
@@ -592,13 +617,17 @@ end
 local function world_from(obj, label)
     if not U.valid(obj) then return nil end
     local settings = prop(obj, "WorldSaveSettings")
-    for _, holder in ipairs({ settings, obj }) do
+    local info = prop(obj, "WorldInfo")
+    for _, holder in ipairs({ info, settings, obj }) do
         if holder ~= nil then
             for _, f in ipairs(WORLD_FIELDS) do
                 local v = nil
                 pcall(function() v = holder[f] end)
                 local s = v ~= nil and text_of(v) or nil
-                if s then return s, label .. (holder == settings and ".WorldSaveSettings." or ".") .. f end
+                if s then
+                    local via = holder == info and ".WorldInfo." or holder == settings and ".WorldSaveSettings." or "."
+                    return s, label .. via .. f
+                end
             end
         end
     end

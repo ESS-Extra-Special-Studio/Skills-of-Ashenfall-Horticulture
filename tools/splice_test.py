@@ -736,6 +736,23 @@ L2.execute(GLUE, SCRIPTS, TMP)
 pl = L2.eval('(function() local st = require("horticulture_splicing").State() return #st.primelets .. " " .. tostring(st.primelets[1].carried) .. " " .. st.primelets[1].x end)()')
 check("restart keeps the Primelet where it was set down", pl == "1 false 120", pl)
 
+# The dev force key seeds a graft ahead of a player with no cabbage plots.
+os.remove(save)
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+g = L.globals()
+g.nearby = L.table_from([])
+g.S.ForcePrimelet()
+g.S.ForcePrimelet()
+n = L.eval('(function() return #require("horticulture_splicing").State().grafts end)()')
+check("dev force seeds one cabbage graft", n == 1, n)
+g.S.Dawn("test")
+for _ in range(6):
+    g.tick()
+check("seeded graft becomes a Primelet ahead of the player", "hybrid:BrassicaPrimelet=200" in g.take("awards"))
+ap = g.take("applied")
+check("seeded Primelet two metres ahead", "prime:p" in ap and ":200,0," in ap, ap)
+
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):
         print("  log:", g.logs[i])

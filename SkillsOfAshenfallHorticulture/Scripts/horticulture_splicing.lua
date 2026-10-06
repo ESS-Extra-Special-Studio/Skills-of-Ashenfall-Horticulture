@@ -518,14 +518,15 @@ local function set_down(entry)
     if not feet then return end
     local d = 120
     local x, y = feet.X + math.cos(math.rad(yaw)) * d, feet.Y + math.sin(math.rad(yaw)) * d
-    local p, why = Primelet.Place(st, entry, x, y, feet.Z, yaw + 180, World.WorldKey())
+    local z = World.GroundAt(x, y, feet.Z)
+    local p, why = Primelet.Place(st, entry, x, y, z, yaw + 180, World.WorldKey())
     if not p then refuse("PRIMELET", why) return end
     save()
     refresh_primelets()
     if not cfg.quiet then
         cfg.ESL.ShowCard(cfg.SKILL, "SET DOWN", Primelet.Name(p), "It surveys its new surroundings and finds them adequate.", 4)
     end
-    U.log(string.format("Primelet %s set down at %.0f, %.0f, %.0f (world %s)", p.id, x, y, feet.Z, tostring(p.world)))
+    U.log(string.format("Primelet %s set down at %.0f, %.0f, %.0f (world %s)", p.id, x, y, z, tostring(p.world)))
 end
 
 -- The game's interact key: tends a Primelet the player faces, unless the
@@ -639,9 +640,25 @@ function Splicing.Refresh() hostsCache.at = -100 refresh_looks() refresh_primele
 
 -- Developer only: the next cabbage-on-cabbage graft that takes becomes a
 -- Brassica Primelet.
+-- With no cabbage-on-cabbage graft pending, one is seeded two metres ahead
+-- of the player (a character with no farm plots can still test it).
 function Splicing.ForcePrimelet()
     forcePrimelet = true
     U.log("[DEV] The next cabbage-on-cabbage graft that takes becomes a Brassica Primelet")
+    if not ensure_state() then return end
+    for _, g in ipairs(st.grafts) do
+        if g.state == "pending" and Core.IsPrimeletGraft(g) then return end
+    end
+    local feet, yaw = World.Facing()
+    if not feet then return end
+    local x = feet.X + math.cos(math.rad(yaw)) * 200 - Core.PRIMELET_OFFSET
+    local y = feet.Y + math.sin(math.rad(yaw)) * 200
+    local g = Store.SetPlants({ id = "g" .. st.nextId, kind = "plot", key = "dev:primelet", state = "pending",
+        made = st.dawn, x = x, y = y, z = World.GroundAt(x + Core.PRIMELET_OFFSET, y, feet.Z), tier = 1, world = World.WorldKey() }, { "FPD_Cabbage", "FPD_Cabbage" })
+    st.nextId = st.nextId + 1
+    st.grafts[#st.grafts + 1] = g
+    save()
+    U.log(string.format("[DEV] Seeded cabbage-on-cabbage graft %s; the Primelet will appear at %.0f, %.0f after dawn", g.id, x + Core.PRIMELET_OFFSET, y))
 end
 
 function Splicing.Dump()
