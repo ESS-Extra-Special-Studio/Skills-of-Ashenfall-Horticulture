@@ -473,7 +473,7 @@ end
 local function untint(saved)
     for _, s in ipairs(saved or {}) do
         if U.valid(s.comp) and s.restore then
-            pcall(function() s.mid:SetScalarParameterValue(FName("RandomColor_HueShift"), s.restore.hue) end)
+            for p, x in pairs(s.restore.scalars) do pcall(function() s.mid:SetScalarParameterValue(FName(p), x) end) end
             for p, c in pairs(s.restore.colors) do pcall(function() s.mid:SetVectorParameterValue(FName(p), c) end) end
         elseif U.valid(s.comp) and s.material then
             pcall(function() s.comp:SetMaterial(s.index, s.material) end)
@@ -482,11 +482,19 @@ local function untint(saved)
 end
 
 -- Mutation tint (horticulture_mutation): the host's own leaf (tree) or
--- plant (crop) materials as dynamic instances with the hybrid's hue shift
--- and colour multiply. A material that is already a dynamic instance is
+-- plant (crop) materials as dynamic instances with the hybrid's colour
+-- multiply and add. A material that is already a dynamic instance is
 -- changed in place and its values kept to put back.
 Looks.MUTATION = true
-local MUTATION_COLORS = { "Color_Mult_A", "Color_Mult_B" }
+
+local function read_color(mid, p)
+    local c = nil
+    pcall(function()
+        local v = mid:K2_GetVectorParameterValue(FName(p))
+        c = { R = v.R, G = v.G, B = v.B, A = v.A }
+    end)
+    return c
+end
 
 local function is_mid(m)
     return tostring(U.full(m) or ""):find("MaterialInstanceDynamic", 1, true) ~= nil
@@ -501,10 +509,24 @@ local function material_path(m)
     return U.full(m)
 end
 
-local function mutate(h, t)
+-- The host's own meshes: a plot's plant mesh, else the tree's root mesh
+-- (not found by a component search on tree Blueprints) and its other meshes.
+local function host_meshes(h)
     local comps = {}
     for _, c in ipairs(h.comps or {}) do if U.valid(c) then comps[#comps + 1] = c end end
-    if #comps == 0 and U.valid(h.actor) then comps = mesh_components(h.actor) end
+    if #comps > 0 or not U.valid(h.actor) then return comps end
+    local root = nil
+    pcall(function() root = h.actor.RootStaticMeshComponent end)
+    if U.valid(root) then comps[1] = root end
+    for _, c in ipairs(mesh_components(h.actor)) do
+        if not (root and U.full(c) == U.full(root)) then comps[#comps + 1] = c end
+    end
+    return comps
+end
+
+local function mutate(h, t)
+    local comps = host_meshes(h)
+    local vectors, scalars = Mutation.Params(t)
     local saved = {}
     for _, comp in ipairs(comps) do
         local n = 0
@@ -516,19 +538,19 @@ local function mutate(h, t)
                 local s = { comp = comp, index = i }
                 if is_mid(original) then
                     s.mid = original
-                    s.restore = { hue = 0, colors = {} }
-                    pcall(function() s.restore.hue = original:K2_GetScalarParameterValue(FName("RandomColor_HueShift")) end)
-                    for _, p in ipairs(MUTATION_COLORS) do
-                        pcall(function() s.restore.colors[p] = original:K2_GetVectorParameterValue(FName(p)) end)
+                    s.restore = { scalars = {}, colors = {} }
+                    for p in pairs(scalars) do
+                        pcall(function() s.restore.scalars[p] = original:K2_GetScalarParameterValue(FName(p)) end)
                     end
+                    for p in pairs(vectors) do s.restore.colors[p] = read_color(original, p) end
                 else
                     s.material = original
                     pcall(function() s.mid = comp:CreateDynamicMaterialInstance(i, original, FName("None")) end)
                 end
                 if U.valid(s.mid) then
-                    pcall(function() s.mid:SetScalarParameterValue(FName("RandomColor_HueShift"), t.hue) end)
-                    local c = { R = t.mult.R, G = t.mult.G, B = t.mult.B, A = 1 }
-                    for _, p in ipairs(MUTATION_COLORS) do pcall(function() s.mid:SetVectorParameterValue(FName(p), c) end) end
+                    s.name = tostring(material_path(original)):match("([%w_]+)$") or "?"
+                    for p, c in pairs(vectors) do pcall(function() s.mid:SetVectorParameterValue(FName(p), c) end) end
+                    for p, x in pairs(scalars) do pcall(function() s.mid:SetScalarParameterValue(FName(p), x) end) end
                     s.midName = U.full(s.mid)
                     saved[#saved + 1] = s
                 end
@@ -557,6 +579,22 @@ local function apply_mutation(b, g, h, hybridId)
     if not t then return end
     b.tinted = mutate(h, t)
     b.mutation = t
+    b.mutationHost = h
+    local slots = {}
+    for _, s in ipairs(b.tinted) do slots[#slots + 1] = s.name end
+    if #b.tinted == 0 then
+        for _, comp in ipairs(host_meshes(h)) do
+            local n, names = -1, {}
+            pcall(function() n = comp:GetNumMaterials() end)
+            for i = 0, math.min(n, 8) - 1 do
+                local m = nil
+                pcall(function() m = comp:GetMaterial(i) end)
+                names[#names + 1] = tostring(material_path(m))
+            end
+            slots[#slots + 1] = U.fname(comp) .. " n=" .. n .. " [" .. table.concat(names, ", ") .. "]"
+        end
+    end
+    U.log(string.format("Mutation tint %s on %s: %d slot(s) %s", t.name, U.fname(h.actor), #b.tinted, table.concat(slots, "; ")))
 end
 Looks.Mutate, Looks.MutationHolds, Looks.Untint = mutate, mutation_holds, untint
 
@@ -669,6 +707,20 @@ function Looks.Clear(graftId)
     built[graftId] = nil
 end
 
+-- Dev: mutation tints off and on again, for before/after comparisons.
+function Looks.DevToggleMutation()
+    Looks.MUTATION = not Looks.MUTATION
+    local n = 0
+    for _, b in pairs(built) do
+        if b.mutationHost then
+            untint(b.tinted)
+            b.tinted = Looks.MUTATION and mutate(b.mutationHost, b.mutation) or nil
+            n = n + 1
+        end
+    end
+    U.log(string.format("[dev] mutation tints %s on %d hybrid(s)", Looks.MUTATION and "on" or "off", n))
+end
+
 function Looks.ClearAll()
     for id in pairs(built) do Looks.Clear(id) end
 end
@@ -689,10 +741,16 @@ local function place(world, b, base, yaw, pieces)
             local x, y = rotate(p.x or 0, p.y or 0, yaw)
             local scale = p.scale or 1
             if p.scaleY or p.scaleZ then scale = { X = scale, Y = p.scaleY or scale, Z = p.scaleZ or scale } end
-            local a = spawn(world, mesh, { X = base.X + x, Y = base.Y + y, Z = base.Z + (p.z or 0) },
+            local loc = { X = base.X + x, Y = base.Y + y, Z = base.Z + (p.z or 0) }
+            local a = spawn(world, mesh, loc,
                 { Pitch = p.pitch or 0, Yaw = (p.yaw or 0) + yaw, Roll = p.roll or 0 }, scale)
             if a then
                 b.actors[#b.actors + 1] = a
+                if b.mode == "primelet" and Primelets.Bobs(p.group) then
+                    local s = type(scale) == "table" and scale or { X = scale, Y = scale, Z = scale }
+                    b.bobs = b.bobs or {}
+                    b.bobs[#b.bobs + 1] = { actor = a, loc = loc, scale = s }
+                end
                 if p.tint then tint(mesh_components(a), p.tint) end
             end
         else
@@ -921,8 +979,8 @@ function Looks.Apply(g, h, mode, hybridId)
         if b.queue then continue_actors(b) end
         if mode == "hybrid" then
             if not Looks.MUTATION then
-                if b.tinted then untint(b.tinted) b.tinted, b.mutation = nil, nil end
-            elseif not b.mutation or not mutation_holds(b.tinted) then
+                if b.tinted then untint(b.tinted) b.tinted = nil end
+            elseif not b.mutation or not b.tinted or not mutation_holds(b.tinted) then
                 apply_mutation(b, g, h, hybridId)
             end
         end
@@ -995,6 +1053,32 @@ function Looks.PrimeletPieces(stageKey, personality, potted)
     return pieces, bubble
 end
 
+-- Idle bob: the body pieces of every drawn Primelet rise, fall and squash a
+-- little, each creature out of step with the others. The pot never moves.
+Looks.PRIMELET_BOB = true
+local bobbing = false
+
+local function start_bob()
+    if bobbing or not Looks.PRIMELET_BOB then return end
+    bobbing = true
+    U.every(100, "Primelet bob", function()
+        local t = os.clock()
+        for _, b in pairs(built) do
+            if b.mode == "primelet" and b.bobs then
+                local dz, sz = Primelets.Bob(t, b.stageKey, b.phase)
+                for _, e in ipairs(b.bobs) do
+                    if U.valid(e.actor) then
+                        pcall(function()
+                            e.actor:K2_SetActorLocation({ X = e.loc.X, Y = e.loc.Y, Z = e.loc.Z + dz }, false, {}, false)
+                            e.actor:SetActorScale3D({ X = e.scale.X, Y = e.scale.Y, Z = e.scale.Z * sz })
+                        end)
+                    end
+                end
+            end
+        end
+    end)
+end
+
 -- A Primelet at loc, facing yaw. Rebuilt only when it moves, grows or is
 -- potted. Returns the number of pieces and the bubble height.
 function Looks.ApplyPrimelet(id, loc, yaw, stageKey, personality, potted)
@@ -1006,10 +1090,12 @@ function Looks.ApplyPrimelet(id, loc, yaw, stageKey, personality, potted)
     local world = UEHelpers.GetWorld()
     if not U.valid(world) then return 0 end
     local pieces, bubbleZ = Looks.PrimeletPieces(stageKey, personality, potted)
-    b = { host = sig, mode = "primelet", actors = {}, count = 0, bubbleZ = bubbleZ }
+    b = { host = sig, mode = "primelet", actors = {}, count = 0, bubbleZ = bubbleZ,
+        stageKey = stageKey, phase = Mutation.Hash(tostring(id)) % 1000 / 100 }
     built[id] = b
     place(world, b, loc, yaw or 0, pieces)
     b.count = #b.actors
+    if b.bobs then start_bob() end
     return b.count, bubbleZ
 end
 

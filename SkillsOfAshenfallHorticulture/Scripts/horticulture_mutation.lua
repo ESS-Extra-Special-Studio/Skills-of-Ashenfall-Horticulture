@@ -2,40 +2,39 @@
 -- their own colour, so a hybrid reads as a mutated plant of its species.
 -- Pure Lua, no game calls; horticulture_looks applies the result.
 --
--- The vanilla leaf material (M_Foliage_Tree and its instances) has
--- RandomColor_HueShift (scalar, fraction of a full turn) and Color_Mult_A /
--- Color_Mult_B (colour multiplies). A tree Blueprint normally feeds the
--- material its per-tree data; a copy of the tree's mesh without it renders
--- the canopy deep blue-violet, which is where Tuberwood Ash's colour came
--- from. Setting the same parameters on a dynamic instance of the host's own
--- leaf material gives that look on purpose, at any time of day.
+-- The vanilla leaf material (M_Foliage_Tree and its instances) multiplies
+-- its colour by Color_Mult_A/B and adds Color_Add_A/B, each weighted by
+-- Color_Mult_Blend / Color_Add_Blend (0 on vanilla trees). Tested in game on
+-- a Blueprint ash: only these two change the canopy; RandomColor_HueShift,
+-- Color Top/Bottom and Subsurface Color do not. The add is what turns a
+-- canopy deep blue-violet.
 local M = {}
 
--- Hand-picked for the flagships. hue: RandomColor_HueShift; mult: the
--- Color_Mult colour (1, 1, 1 leaves the texture's colour).
+-- Hand-picked for the flagships. mult: Color_Mult (1, 1, 1 keeps the leaf's
+-- colour); add: Color_Add (0, 0, 0 adds nothing).
 M.FLAGSHIP = {
-    TuberwoodAsh = { name = "deep blue-violet", hue = 0.42, mult = { R = 0.55, G = 0.5, B = 1.0 } },
-    BrassicaOak = { name = "cabbage blue-green", hue = 0.1, mult = { R = 0.75, G = 0.95, B = 0.9 } },
-    Brassitato = { name = "purple-veined", hue = 0.72, mult = { R = 0.9, G = 0.75, B = 0.95 } },
-    SheafAsh = { name = "harvest gold", hue = -0.08, mult = { R = 1.0, G = 0.9, B = 0.55 } },
-    WeepingOak = { name = "silver-green", hue = 0.05, mult = { R = 0.85, G = 0.95, B = 0.85 } },
-    BrambleOak = { name = "bramble red", hue = -0.2, mult = { R = 1.0, G = 0.7, B = 0.65 } },
-    TwoBarkAsh = { name = "copper", hue = -0.12, mult = { R = 1.0, G = 0.8, B = 0.6 } },
-    WeepingCabbage = { name = "onion-skin pink", hue = 0.85, mult = { R = 1.0, G = 0.8, B = 0.85 } },
+    TuberwoodAsh = { name = "deep blue-violet", mult = { R = 0.35, G = 0.3, B = 0.6 }, add = { R = 0.1, G = 0.02, B = 0.4 } },
+    BrassicaOak = { name = "cabbage blue-green", mult = { R = 0.7, G = 0.9, B = 1.0 }, add = { R = 0.0, G = 0.04, B = 0.1 } },
+    Brassitato = { name = "purple-veined", mult = { R = 0.85, G = 0.7, B = 0.9 }, add = { R = 0.08, G = 0.0, B = 0.1 } },
+    SheafAsh = { name = "harvest gold", mult = { R = 1.0, G = 0.85, B = 0.4 }, add = { R = 0.18, G = 0.1, B = 0.0 } },
+    WeepingOak = { name = "silver-green", mult = { R = 0.85, G = 0.95, B = 0.85 }, add = { R = 0.06, G = 0.08, B = 0.06 } },
+    BrambleOak = { name = "bramble red", mult = { R = 0.9, G = 0.55, B = 0.5 }, add = { R = 0.18, G = 0.0, B = 0.02 } },
+    TwoBarkAsh = { name = "copper", mult = { R = 0.95, G = 0.65, B = 0.4 }, add = { R = 0.14, G = 0.05, B = 0.0 } },
+    WeepingCabbage = { name = "onion-skin pink", mult = { R = 1.0, G = 0.75, B = 0.85 }, add = { R = 0.12, G = 0.02, B = 0.08 } },
 }
 
 -- Ordinary combinations: one of these, chosen by the combination itself, so
 -- the same pair always looks the same. Subtle to moderate; each still reads
 -- as its species.
 M.PALETTE = {
-    { name = "teal", hue = 0.15, mult = { R = 0.8, G = 1.0, B = 0.95 } },
-    { name = "amber", hue = -0.06, mult = { R = 1.0, G = 0.9, B = 0.7 } },
-    { name = "plum", hue = 0.7, mult = { R = 0.9, G = 0.8, B = 0.95 } },
-    { name = "rust", hue = -0.14, mult = { R = 1.0, G = 0.8, B = 0.7 } },
-    { name = "frost", hue = 0.3, mult = { R = 0.85, G = 0.92, B = 1.0 } },
-    { name = "lime", hue = 0.04, mult = { R = 0.95, G = 1.0, B = 0.75 } },
-    { name = "rose", hue = 0.88, mult = { R = 1.0, G = 0.85, B = 0.9 } },
-    { name = "indigo", hue = 0.5, mult = { R = 0.8, G = 0.8, B = 1.0 } },
+    { name = "teal", mult = { R = 0.7, G = 1.0, B = 0.95 }, add = { R = 0.0, G = 0.04, B = 0.08 } },
+    { name = "amber", mult = { R = 1.0, G = 0.85, B = 0.55 }, add = { R = 0.1, G = 0.05, B = 0.0 } },
+    { name = "plum", mult = { R = 0.8, G = 0.65, B = 0.85 }, add = { R = 0.08, G = 0.0, B = 0.1 } },
+    { name = "rust", mult = { R = 0.95, G = 0.65, B = 0.5 }, add = { R = 0.12, G = 0.02, B = 0.0 } },
+    { name = "frost", mult = { R = 0.85, G = 0.95, B = 1.0 }, add = { R = 0.05, G = 0.07, B = 0.1 } },
+    { name = "lime", mult = { R = 0.95, G = 1.0, B = 0.6 }, add = { R = 0.05, G = 0.08, B = 0.0 } },
+    { name = "rose", mult = { R = 1.0, G = 0.75, B = 0.8 }, add = { R = 0.1, G = 0.02, B = 0.05 } },
+    { name = "indigo", mult = { R = 0.6, G = 0.6, B = 0.95 }, add = { R = 0.03, G = 0.02, B = 0.15 } },
 }
 
 -- FNV-1a over the key's bytes, 32 bits.
@@ -57,13 +56,23 @@ function M.For(hybridId, comboKey)
     return M.PALETTE[M.Hash(key) % #M.PALETTE + 1]
 end
 
--- Which of a host's materials take the tint. Trees: leaves only (their bark
--- shares the parameter names). Crops: the whole plant mesh.
-local LEAF = { "leaves", "leaf", "canopy", "foliage", "needles", "frond" }
+-- The material parameters for a tint: vectors and scalars by name.
+function M.Params(t)
+    local m = { R = t.mult.R, G = t.mult.G, B = t.mult.B, A = 1 }
+    local a = { R = t.add.R, G = t.add.G, B = t.add.B, A = 1 }
+    return { Color_Mult_A = m, Color_Mult_B = m, Color_Add_A = a, Color_Add_B = a },
+        { Color_Mult_Blend = 1, Color_Add_Blend = 1 }
+end
+
+-- Which of a host's materials take the tint. Trees: leaves, and the distant
+-- impostor so the colour holds far away; not bark (it shares the parameter
+-- names). Only the material's own name counts: tree folders are named
+-- Foliage. Crops: the whole plant mesh.
+local LEAF = { "leaves", "leaf", "canopy", "needles", "frond", "_imp" }
 
 function M.Takes(kind, materialPath)
     if kind == "plot" then return true end
-    local p = tostring(materialPath or ""):lower()
+    local p = tostring(materialPath or ""):lower():match("([^/]+)$") or ""
     for _, w in ipairs(LEAF) do
         if p:find(w, 1, true) then return true end
     end
