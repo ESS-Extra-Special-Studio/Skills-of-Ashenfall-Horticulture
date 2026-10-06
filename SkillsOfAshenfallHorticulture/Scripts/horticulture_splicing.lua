@@ -910,6 +910,29 @@ function Splicing.ForcePrimelet()
     U.log(string.format("[DEV] Seeded cabbage-on-cabbage graft %s; the Primelet will appear at %.0f, %.0f after dawn", g.id, x + Core.PRIMELET_OFFSET, y))
 end
 
+-- Developer only: the planted crop or tree under the crosshair becomes a
+-- hybrid of scion now (any graft on it is replaced), for checking real hosts
+-- without dawn rolls. False and the reason when there is no such host.
+function Splicing.DevHybrid(scion)
+    if not ensure_state() then return false, "no character" end
+    local c = World.Aimed()
+    if not (c and (c.kind == "plot" or (c.planted and c.kind ~= "stump"))) then return false, "aim at a farm plot or a tree you planted" end
+    if not c.species then return false, "the plant under the crosshair has no species" end
+    local old = Core.GraftOn(st, as_point(c))
+    if old then Core.Remove(st, old) Looks.Clear(old.id) plotStage[old.id] = nil end
+    local h = host_from(c)
+    local g = Store.SetPlants({ id = "g" .. st.nextId, kind = h.kind, state = "hybrid", made = st.dawn - 1,
+        x = h.x, y = h.y, z = h.z, key = h.key, tier = h.tier, world = h.world }, { c.species, scion })
+    st.nextId = st.nextId + 1
+    st.grafts[#st.grafts + 1] = g
+    save()
+    hostsCache.at = -100
+    refresh_looks()
+    U.log(string.format("[DEV] %s is now %s (%s>%s, %s %s, stage %s)", g.id, Rules.HybridName(scion, c.species), scion, c.species,
+        c.kind, U.full(c.actor or c.obj), tostring(c.stage)))
+    return true
+end
+
 -- Developer only: the Primelet nearest the player grows one stage now.
 function Splicing.DevGrowPrimelet()
     if not ensure_state() then return end
