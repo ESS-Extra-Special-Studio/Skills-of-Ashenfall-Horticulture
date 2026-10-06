@@ -1144,6 +1144,24 @@ check("sway: a tree walked out of range is parked upright; the next nearest take
 check("sway: a tree pushed past the budget is parked upright, not frozen", sw[3] == "budget-parked true", sw[3])
 check("sway: a look that is gone is dropped", sw[4] == "gone true 5", sw[4])
 check("sway: game wind direction 0 falls back to a default direction", sw[5] == "calm true true", sw[5])
+
+# Baked fruit layers (manifest host mesh + hybrid/produce -> asset) ----------
+L = fresh()
+fl = L.eval(r"""function()
+    local F = require("horticulture_fruit_layers")
+    local none = tostring(F.Find("/Game/A/SM_Ash", "tuberwood_ash", "Potato"))
+    F.Set({ schema = F.SCHEMA, layers = {
+        { host = "/Game/A/SM_Ash", produce = "Potato", asset = "/Game/Mods/SoAHorticulture/FruitLayers/SM_FL_Ash_Potato" },
+        { host = "/Game/A/SM_Ash", hybrid = "tuberwood_ash", asset = "/Game/Mods/X/SM_FL_Tuberwood.SM_FL_Tuberwood" },
+        { host = "/Game/A/SM_Oak", asset = "/Game/Mods/X/SM_Bad" },
+    } }, "test")
+    local hyb = F.Find("/Game/A/SM_Ash", "tuberwood_ash", "Potato")
+    local gen = F.Find("/Game/A/SM_Ash", "generic:Potato>Ash", "Potato")
+    local miss = F.Find("/Game/A/SM_Oak", "x", "Potato")
+    return table.concat({ none, F.Count(), hyb.asset, gen.asset, tostring(miss) }, "|")
+end""")()
+check("fruit layers: hybrid wins over produce, asset path completed, bad/missing entries ignored",
+      fl == "nil|2|/Game/Mods/X/SM_FL_Tuberwood.SM_FL_Tuberwood|/Game/Mods/SoAHorticulture/FruitLayers/SM_FL_Ash_Potato.SM_FL_Ash_Potato|nil", fl)
 check("sway: no wind readable, nothing touched", sw[6] == "nowind 0", sw[6])
 check("sway: anchor rotation is host yaw then tilt", sw[7] == "compose 0.50 90.00 0.00" or sw[7] == "compose 0.50 90.00 -0.00", sw[7])
 print("  info: sway reach at 6 m", sw[8], "| pure Lua per tree update (us):", sw[9])

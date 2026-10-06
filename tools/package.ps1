@@ -20,6 +20,7 @@ $Allow = @(
     "^$mod/LICENSE$",
     "^$mod/Scripts/[a-z_]+\.lua$",
     "^$mod/Scripts/placements/hort_plant_[a-z0-9_]+_v[0-9]{3}\.lua$",
+    "^$mod/Scripts/placements/hort_fruit_layers_v[0-9]{3}\.lua$",
     "^$mod/SoAHorticulture_P\.(pak|ucas|utoc)$",
     "^$mod/Textures/[a-z0-9-]+\.png$"
 )

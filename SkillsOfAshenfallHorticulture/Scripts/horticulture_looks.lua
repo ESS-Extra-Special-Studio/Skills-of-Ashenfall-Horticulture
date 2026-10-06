@@ -281,6 +281,7 @@ local scriptsDir = nil
 local Placements = require("horticulture_placements")
 local Generic = require("horticulture_hybrid_generic")
 local Primelets = require("horticulture_primelet_looks")
+local FruitLayers = require("horticulture_fruit_layers")
 local Mutation = require("horticulture_mutation")
 
 -- Placement looks: at most CAP pieces per host (instanced, or as actors),
@@ -356,6 +357,10 @@ function Looks.Init(util, dir)
     havePak = pak ~= nil
     if pak then pak:close() end
     U.log("Horticulture pak " .. (havePak and "installed: hybrid stalks and Primelet faces shown" or "not installed: hybrid looks use the game's meshes only"))
+    if FruitLayers.Load(dir .. "\\placements") then
+        U.log(string.format("Baked fruit layers: %d in %s%s", FruitLayers.Count(), FruitLayers.File(),
+            havePak and "" or " (pak missing: not used)"))
+    end
     if Generic.Load(dir .. "\\placements") then
         U.log("Generic hybrid looks: " .. table.concat(Generic.Files(), ", "))
     else
@@ -902,6 +907,34 @@ local function continue_actors(b)
     return false
 end
 
+-- A baked fruit layer for this host mesh and hybrid: one mesh at the host
+-- component's exact transform, swaying with the tree's own material wind,
+-- so the root-tilt sway leaves it alone. False when there is none or it
+-- cannot be loaded (the per-cluster pieces are used instead).
+local function build_fruit_layer(world, b, key, hybridId, g, loc, rot, scl)
+    if not havePak then return false end
+    local layer = FruitLayers.Find(key, hybridId, g and g.scion)
+    if not layer then return false end
+    local mesh = load(layer.asset)
+    if not mesh then
+        U.log_once("layer" .. layer.asset, "Fruit layer " .. layer.asset .. " could not be loaded; per-cluster fruit used")
+        return false
+    end
+    local a = spawn(world, mesh, loc, rot, scl)
+    if not a then return false end
+    b.actors[#b.actors + 1] = a
+    b.fruitLayer = layer.asset
+    b.t = { loc = loc, rot = rot, scl = scl }
+    local comp = nil
+    pcall(function() comp = a.StaticMeshComponent end)
+    if U.valid(comp) then
+        if layer.cull then pcall(function() comp:SetCullDistance(layer.cull) end) end
+        apply_overrides(comp, layer.overrides)
+    end
+    U.log(string.format("%s look: baked fruit layer %s on %s", hybridId, layer.asset:match("([^%./]+)$") or layer.asset, key:match("([^/]+)$") or key))
+    return true
+end
+
 -- The placement data for graft g: the flagship's own file when it covers
 -- this host's mesh, else the generic look for the combination (socket set
 -- of the host mesh x produce of the scion). nil for combinations beyond
@@ -932,6 +965,7 @@ local function apply_placement(world, b, h, hybridId, g)
     end
     local loc, rot, scl = comp_transform(comp)
     if not loc then return false end
+    if build_fruit_layer(world, b, key, hybridId, g, loc, rot, scl) then return true end
     local cull = data.component_defaults and data.component_defaults.cull_distance_cm
     local tints = Placements.GROUP_TINT[hybridId]
     local tintTables = nil
@@ -1002,7 +1036,7 @@ function Looks.Apply(g, h, mode, hybridId)
     if mode == "hybrid" then apply_mutation(b, g, h, hybridId) end
     if mode == "hybrid" and not packaged and apply_placement(world, b, h, hybridId, g) then
         b.count = math.max(#b.actors, b.instances or 0)
-        if swayer and b.instances and b.t and b.anchor and h.kind ~= "plot" then
+        if swayer and not b.fruitLayer and b.instances and b.t and b.anchor and h.kind ~= "plot" then
             swayer:add(g.id, b, { X = b.t.loc.X, Y = b.t.loc.Y, Yaw = b.t.rot.Yaw })
         end
         return b.count
