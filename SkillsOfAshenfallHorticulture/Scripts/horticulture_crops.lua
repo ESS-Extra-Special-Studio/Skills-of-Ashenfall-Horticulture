@@ -182,12 +182,15 @@ end
 local stateWay = nil
 
 -- False for a plot still on the build cursor (BuildingPiece bIsPreview or
--- bIsGhosted): it is not a plot yet, so it is never a host or a source.
+-- bIsGhosted), and for a slot whose owner is gone: leaving build mode
+-- leaves the preview's slot behind for a moment, and reading its plant mesh
+-- crashed the game (UE4SS.dll+0x2ace27). Neither is a host or a source.
 function Crops.Placed(slot)
     if not U.valid(slot) then return false end
     local owner = nil
-    pcall(function() owner = slot:GetOwner() end)
-    if not U.valid(owner) then return true end
+    local asked = pcall(function() owner = slot:GetOwner() end)
+    if asked and not U.valid(owner) then return false end
+    if not asked then return true end
     local preview, ghost = false, false
     pcall(function() preview = owner.bIsPreview == true end)
     pcall(function() ghost = owner.bIsGhosted == true end)

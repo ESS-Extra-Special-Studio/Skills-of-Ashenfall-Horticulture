@@ -9,6 +9,7 @@
 local Core = require("horticulture_splice_core")
 local Rules = require("horticulture_splice_rules")
 local Primelet = require("horticulture_primelet")
+local U = require("horticulture_util")
 
 local Wheel = {}
 
@@ -162,8 +163,22 @@ function Wheel.Start(S, dir, status)
         end
     end
     -- One context per wheel opening: every check of one query runs together.
+    -- The wheel polls these on its own timers, outside U.every, so they get
+    -- the same build-mode hold: no world reads while a piece streams in.
+    local building = Wheel.View({ blocked = "Not while building" })
+    local name = S.TargetName
+    if name then
+        S.TargetName = function(target)
+            if U.Building() then return nil end
+            return name(target)
+        end
+    end
     local cached, at = nil, -1
     local function view()
+        if U.Building() then
+            cached = nil
+            return building
+        end
         local now = os.clock()
         if not cached or now - at > 0.25 then
             local ok, ctx = pcall(S.WheelContext)
