@@ -19,8 +19,8 @@ Placements.FILES = {
 -- Groups dropped first when a shape has more pieces than the cap.
 Placements.THIN_FIRST = { "ground_fruit", "canopy_stem" }
 
--- Groups recoloured with a Looks tint name, per hybrid. Empty: the oak tint
--- turned the Weeping Oak's willow fronds bright blue in game.
+-- Groups recoloured with a Looks tint name, per hybrid. Empty: the tint
+-- parameters had no visible effect on the willow canopy in game.
 Placements.GROUP_TINT = {}
 
 local cache = {}
