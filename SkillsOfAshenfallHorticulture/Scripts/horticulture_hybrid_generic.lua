@@ -76,16 +76,31 @@ function G.UseFor(hostKind, scionIsTree)
     return "hang"
 end
 
--- { {index (0-based), socket, pieces}, ... } by the documented rule.
-function G.Select(shape, entry, use)
+-- { {cluster index (0-based), socket, pieces}, ... } by the documented rule.
+-- shape.picks[scion] (0-based {socket, variant} pairs chosen at build time so
+-- the pieces fit) wins over "first min(#sockets, clusters), variant i % n".
+function G.Select(shape, entry, use, scion)
     local sockets = shape.sockets[use]
     local u = entry.uses[use]
     if not u or not sockets or #sockets == 0 then return {} end
-    local out = {}
-    for i = 1, math.min(#sockets, u.clusters) do
-        local s = sockets[i]
+    local function variants_for(s)
         local variants = u.variants
         if variants[1] == nil then variants = variants[s.mode or "default"] end
+        return variants
+    end
+    local out = {}
+    local picks = scion ~= nil and shape.picks and shape.picks[scion] or nil
+    if picks then
+        for i, p in ipairs(picks) do
+            local s = sockets[p[1] + 1]
+            local variants = variants_for(s)
+            out[#out + 1] = { i - 1, s, variants[(p[2] % #variants) + 1] }
+        end
+        return out
+    end
+    for i = 1, math.min(#sockets, u.clusters) do
+        local s = sockets[i]
+        local variants = variants_for(s)
         out[#out + 1] = { i - 1, s, variants[((i - 1) % #variants) + 1] }
     end
     return out
@@ -101,7 +116,7 @@ function G.ComboAttachments(sockets, produce, hostMesh, scion)
     local use = G.UseFor(shape.kind, entry.kind == "tree")
     local atts = {}
     if not use then return atts end
-    for _, sel in ipairs(G.Select(shape, entry, use)) do
+    for _, sel in ipairs(G.Select(shape, entry, use, scion)) do
         local i, s, pieces = sel[1], sel[2], sel[3]
         for k, p in ipairs(pieces) do
             local loc, rot, scale = G.Compose(s, p)

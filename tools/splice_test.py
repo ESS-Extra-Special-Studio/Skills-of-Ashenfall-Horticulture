@@ -663,7 +663,7 @@ mo = L.eval(r"""function(scripts, vdir)
     out[#out + 1] = "broken " .. tostring(ok)
     return table.concat(out, "\n")
 end""")(SCRIPTS, vdir).split("\n")
-check("newest shipped versions are used (Tuberwood v013, Brassica-Oak v005, Sheaf v004, Brassitato v003, Weeping v003)", mo[0] == "files v013 v005 v004 v003 v003", mo[0])
+check("newest shipped versions are used (Tuberwood v013, Brassica-Oak v005, Sheaf v004, Brassitato v004, Weeping v003)", mo[0] == "files v013 v005 v004 v004 v003", mo[0])
 check("loader takes the newest file that loads (a broken newer one is skipped)", mo[1] == "pick new nil", mo[1])
 check("instanced cap keeps every pak-free Tuberwood piece on all three shapes", mo[2] == "ismcap 3", mo[2])
 check("Weeping Oak overrides reach the pieces (one instanced component per tree)", mo[3].startswith("willow 2 piece(s) 1 key(s) slot 0 Color_Mult_A 1.15 1.45 0.20 1 scalars Color_Mult_Blend=1.00 Subsurface Amount scale=0.35 none=''"), mo[3])
@@ -1365,7 +1365,7 @@ gen = L.eval(r"""function(scripts)
     local Rules = require("horticulture_splice_rules")
     local out = {}
     if not G.Load(scripts .. "\\placements") then return "load failed" end
-    local combos = dofile(scripts .. "\\placements\\hort_plant_generic_hybrids_1_25_combos_v003.lua").combos
+    local combos = dofile(scripts .. "\\placements\\hort_plant_generic_hybrids_1_25_combos_v004.lua").combos
     local n, missing, empty, big, bigPak, nestOnTree, leafy, illegal, nopakMoved = 0, {}, {}, 0, 0, 0, 0, 0, 0
     for _, e in ipairs(combos) do
         n = n + 1
@@ -1651,7 +1651,7 @@ mut = L.eval(r"""function(scripts, tmp)
     local M = require("horticulture_mutation")
     local Rules = require("horticulture_splice_rules")
     local out = {}
-    local combos = dofile(scripts .. "\\placements\\hort_plant_generic_hybrids_1_25_combos_v003.lua").combos
+    local combos = dofile(scripts .. "\\placements\\hort_plant_generic_hybrids_1_25_combos_v004.lua").combos
     local n, none, bad, unstable, used = 0, 0, 0, 0, {}
     for _, e in ipairs(combos) do
         local scion, host = e.key:match("^(.-)>(.+)$")
