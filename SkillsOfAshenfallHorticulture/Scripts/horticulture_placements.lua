@@ -6,15 +6,17 @@
 -- hung with cabbages. Pure Lua: no game calls, so it is tested offline.
 local Placements = {}
 
--- Hybrid id -> versioned placement file. A new pipeline version is a new
--- file here; the old one can stay until the new one is checked in game.
+-- Hybrid id -> pipeline id. The newest <id>_vNNN.lua in Scripts\placements
+-- is used (versions up to MAX_VERSION are tried, newest first), so a new
+-- pipeline version is just a new file.
 Placements.FILES = {
-    TuberwoodAsh = "hort_plant_tuberwood_ash_v006",
-    BrassicaOak = "hort_plant_brassica_oak_v001",
-    SheafAsh = "hort_plant_sheaf_ash_v001",
-    Brassitato = "hort_plant_brassitato_v001",
-    WeepingOak = "hort_plant_weeping_oak_v001",
+    TuberwoodAsh = "hort_plant_tuberwood_ash",
+    BrassicaOak = "hort_plant_brassica_oak",
+    SheafAsh = "hort_plant_sheaf_ash",
+    Brassitato = "hort_plant_brassitato",
+    WeepingOak = "hort_plant_weeping_oak",
 }
+Placements.MAX_VERSION = 50
 
 -- Groups dropped first when a shape has more pieces than the cap.
 Placements.THIN_FIRST = { "ground_fruit", "canopy_stem" }
@@ -27,18 +29,29 @@ local cache = {}
 
 -- data for a hybrid, read once from dir\placements\<file>.lua; nil (and a
 -- reason) when the hybrid has no data or the file is missing or bad.
+local function newest(dir, id)
+    for v = Placements.MAX_VERSION, 1, -1 do
+        local file = string.format("%s_v%03d", id, v)
+        local chunk = loadfile(dir .. "\\placements\\" .. file .. ".lua") or loadfile(dir .. "/placements/" .. file .. ".lua")
+        if chunk then return chunk, file end
+    end
+    return nil, nil
+end
+
+-- (The data is plain Lua tables, never engine objects, so caching it is safe.)
 function Placements.Load(dir, hybridId)
-    local file = Placements.FILES[hybridId]
-    if not file then return nil, "no placement data" end
-    if cache[file] ~= nil then return cache[file] or nil, cache[file] and nil or "unreadable" end
-    local chunk = loadfile(dir .. "\\placements\\" .. file .. ".lua") or loadfile(dir .. "/placements/" .. file .. ".lua")
+    local id = Placements.FILES[hybridId]
+    if not id then return nil, "no placement data" end
+    if cache[id] ~= nil then return cache[id] or nil, cache[id] and nil or "unreadable" end
+    local chunk, file = newest(dir, id)
     local ok, data = false, nil
     if chunk then ok, data = pcall(chunk) end
     if not ok or type(data) ~= "table" or data.schema ~= "ess.hybrid_placement/1" or type(data.shapes) ~= "table" then
-        cache[file] = false
+        cache[id] = false
         return nil, "unreadable"
     end
-    cache[file] = data
+    data.file = file
+    cache[id] = data
     return data
 end
 
@@ -95,10 +108,43 @@ function Placements.Pieces(shape, opts)
             path = asset(a.mesh), x = l[1] or 0, y = l[2] or 0, z = l[3] or 0,
             pitch = r[1] or 0, yaw = r[2] or 0, roll = r[3] or 0,
             scale = s[1] or 1, scaleY = s[2] or s[1] or 1, scaleZ = s[3] or s[1] or 1,
-            group = a.group,
+            group = a.group, overrides = a.material_overrides,
         }
     end
     return out
+end
+
+-- A stable text key for a piece's material overrides ("" when none), so
+-- pieces sharing a mesh share an instanced component only when their
+-- materials match.
+function Placements.OverrideKey(overrides)
+    if type(overrides) ~= "table" or #overrides == 0 then return "" end
+    local parts = {}
+    for _, mo in ipairs(overrides) do
+        local kv = {}
+        for name, v in pairs(mo.vector or {}) do
+            kv[#kv + 1] = string.format("%s=%g,%g,%g,%g", name, v[1] or 0, v[2] or 0, v[3] or 0, v[4] or 1)
+        end
+        for name, x in pairs(mo.scalar or {}) do kv[#kv + 1] = string.format("%s=%g", name, x) end
+        table.sort(kv)
+        parts[#parts + 1] = tostring(mo.slot or 0) .. ":" .. table.concat(kv, ";")
+    end
+    return table.concat(parts, "|")
+end
+
+-- The calls for one material override, as plain data:
+-- { slot, vectors = { {name, {R,G,B,A}} }, scalars = { {name, x} } }.
+function Placements.OverrideCalls(mo)
+    local calls = { slot = mo.slot or 0, vectors = {}, scalars = {} }
+    for name, v in pairs(mo.vector or {}) do
+        calls.vectors[#calls.vectors + 1] = { name, { R = v[1] or 0, G = v[2] or 0, B = v[3] or 0, A = v[4] or 1 } }
+    end
+    for name, x in pairs(mo.scalar or {}) do
+        if type(x) == "number" then calls.scalars[#calls.scalars + 1] = { name, x } end
+    end
+    table.sort(calls.vectors, function(a, b) return a[1] < b[1] end)
+    table.sort(calls.scalars, function(a, b) return a[1] < b[1] end)
+    return calls
 end
 
 -- Rotation maths in Unreal's conventions (FRotator degrees, FQuat).

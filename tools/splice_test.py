@@ -550,12 +550,79 @@ end""")(SCRIPTS).split("\n")
 for line, want in zip(pl[:5], ["TuberwoodAsh=9 hosts 0 bad 0", "BrassicaOak=6 hosts 0 bad 0", "SheafAsh=9 hosts 0 bad 0",
                                "Brassitato=3 hosts 0 bad 0", "WeepingOak=6 hosts 0 bad 0"]):
     check("placement data: " + want.split("=")[0] + " covers every host with vanilla meshes only", line.startswith(want) and line.endswith(" 0 nonvanilla"), line)
-check("host picked by mesh path; stalks need the pak; cap drops fallen fruit first", pl[5].startswith("tub SM_FH_Ash_Tree_02 shape_1 all 69 free 51 capped 40 ground 0"), pl[5])
+check("host picked by mesh path; stalks need the pak; cap drops fallen fruit first", pl[5].startswith("tub SM_FH_Ash_Tree_02 shape_1 all 132 free 104 capped 40 ground 0"), pl[5])
 check("Tuberwood potatoes hang in the canopy (most above 6 m)", int(pl[5].split("high ")[1]) >= 40, pl[5])
 check("unknown host or hybrid: no placement data", pl[6] == "none=true true", pl[6])
 check("rotator <-> quaternion round trip", pl[7] == "rot 10.00 30.00 -20.00", pl[7])
 check("world transform on a turned, scaled host", pl[8] == "world 1000 2150 75 yaw 100 scale 3.0", pl[8])
 check("instance transform: unit quaternion and location", pl[9].startswith("xf 1.000 "), pl[9])
+
+# Newest placement version, material overrides
+vdir = os.path.join(TMP, "vers")
+os.makedirs(os.path.join(vdir, "placements"), exist_ok=True)
+for v, tag in [(1, "old"), (3, "new"), (12, "bad")]:
+    with open(os.path.join(vdir, "placements", "hort_plant_sheaf_ash_v%03d.lua" % v), "w") as f:
+        f.write('return { schema = "ess.hybrid_placement/1", shapes = {}, hosts = {}, tag = "%s" }' % tag if tag != "bad" else "return {")
+mo = L.eval(r"""function(scripts, vdir)
+    local P = require("horticulture_placements")
+    local out = {}
+    P.Reset()
+    local files = {}
+    for _, id in ipairs({ "TuberwoodAsh", "BrassicaOak", "SheafAsh", "Brassitato", "WeepingOak" }) do
+        files[#files + 1] = P.Load(scripts, id).file:match("_(v%d+)$")
+    end
+    out[#out + 1] = "files " .. table.concat(files, " ")
+    P.Reset()
+    local d, why = P.Load(vdir, "SheafAsh")
+    out[#out + 1] = "pick " .. tostring(d and d.tag) .. " " .. tostring(why)
+    P.Reset()
+    local tub = P.Load(scripts, "TuberwoodAsh")
+    local all = 0
+    for _, s in pairs(tub.shapes) do
+        local n = #P.Pieces(s, { havePak = false, cap = require("horticulture_looks").CAP.ism })
+        local free = #P.Pieces(s, { havePak = false })
+        if n == free then all = all + 1 end
+    end
+    out[#out + 1] = "ismcap " .. all
+    local w = P.Load(scripts, "WeepingOak")
+    local keys, pieces = {}, 0
+    for name, s in pairs(w.shapes) do
+        for _, p in ipairs(P.Pieces(s, { havePak = false })) do
+            pieces = pieces + 1
+            keys[P.OverrideKey(p.overrides)] = true
+        end
+    end
+    local nk = 0
+    for _ in pairs(keys) do nk = nk + 1 end
+    local p = P.Pieces(w.shapes.shape_1, {})[1]
+    local c = P.OverrideCalls(p.overrides[1])
+    local v = c.vectors[1]
+    out[#out + 1] = string.format("willow %d piece(s) %d key(s) slot %d %s %.2f %.2f %.2f %.0f scalars %s=%.2f %s=%.2f none='%s'",
+        pieces, nk, c.slot, v[1], v[2].R, v[2].G, v[2].B, v[2].A, c.scalars[1][1], c.scalars[1][2], c.scalars[2][1], c.scalars[2][2],
+        P.OverrideKey(P.Pieces(tub.shapes.shape_1, {})[1].overrides))
+    -- applying them to a component: recorded calls; a failing engine call is swallowed
+    local Looks = require("horticulture_looks")
+    Looks.Init(require("horticulture_util"), vdir)
+    local calls = {}
+    local mid = { IsValid = function() return true end,
+        SetVectorParameterValue = function(_, n, c) calls[#calls + 1] = "v " .. n .. string.format(" %.2f", c.G) end,
+        SetScalarParameterValue = function(_, n, x) calls[#calls + 1] = "s " .. n .. string.format(" %.2f", x) end }
+    local comp = { GetMaterial = function(_, i) return "MI" .. i end,
+        CreateDynamicMaterialInstance = function(_, i, src, name) calls[#calls + 1] = "mid " .. i .. " " .. tostring(src) return mid end }
+    Looks.ApplyOverrides(comp, p.overrides)
+    out[#out + 1] = table.concat(calls, ", ")
+    local broken = { GetMaterial = function() error("gone") end, CreateDynamicMaterialInstance = function() error("no") end }
+    local ok = pcall(Looks.ApplyOverrides, broken, p.overrides)
+    out[#out + 1] = "broken " .. tostring(ok)
+    return table.concat(out, "\n")
+end""")(SCRIPTS, vdir).split("\n")
+check("newest shipped versions are used (Brassitato stays v001)", mo[0] == "files v007 v002 v002 v001 v002", mo[0])
+check("loader takes the newest file that loads (a broken newer one is skipped)", mo[1] == "pick new nil", mo[1])
+check("instanced cap keeps every pak-free Tuberwood piece on all three shapes", mo[2] == "ismcap 3", mo[2])
+check("Weeping Oak overrides reach the pieces (one instanced component per tree)", mo[3].startswith("willow 2 piece(s) 1 key(s) slot 0 Color_Mult_A 1.15 1.45 0.20 1 scalars Color_Mult_Blend=1.00 Subsurface Amount scale=0.35 none=''"), mo[3])
+check("overrides: one dynamic instance of the slot's material, then its parameters",
+      mo[4] == "mid 0 MI0, v Color_Mult_A 1.45, v Color_Mult_B 1.45, s Color_Mult_Blend 1.00, s Subsurface Amount scale 0.35", mo[4])
+check("overrides: engine failures are swallowed", mo[5] == "broken true", mo[5])
 
 # The game glue, with a fake world -----------------------------------------
 GLUE = r"""

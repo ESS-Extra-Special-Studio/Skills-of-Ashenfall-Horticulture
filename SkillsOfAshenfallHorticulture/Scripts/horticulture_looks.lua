@@ -272,7 +272,7 @@ local Placements = require("horticulture_placements")
 
 -- Placement looks: at most CAP pieces per host (instanced, or as actors),
 -- BATCH actors added per refresh. mode "ism" or "actors" (dev toggle).
-Looks.CAP = { ism = 64, actors = 40 }
+Looks.CAP = { ism = 128, actors = 40 }
 Looks.BATCH = 24
 Looks.mode = "ism"
 -- The Horticulture pak (our stalk mesh), beside the Scripts folder. v1
@@ -563,6 +563,26 @@ local function comp_transform(c)
     return loc, rot, scl
 end
 
+-- The data's material overrides on one component: a dynamic instance of
+-- the slot's material with the listed parameters. Best effort; a failure
+-- leaves the mesh's own material. The instance belongs to the component,
+-- so nothing is kept here.
+local function apply_overrides(comp, overrides)
+    for _, mo in ipairs(overrides or {}) do
+        pcall(function()
+            local c = Placements.OverrideCalls(mo)
+            local current = nil
+            pcall(function() current = comp:GetMaterial(c.slot) end)
+            local mid = comp:CreateDynamicMaterialInstance(c.slot, current, FName("None"))
+            if not U.valid(mid) then return end
+            for _, v in ipairs(c.vectors) do pcall(function() mid:SetVectorParameterValue(FName(v[1]), v[2]) end) end
+            for _, s in ipairs(c.scalars) do pcall(function() mid:SetScalarParameterValue(FName(s[1]), s[2]) end) end
+        end)
+    end
+end
+
+Looks.ApplyOverrides = apply_overrides
+
 local IDENTITY = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 }, Translation = { X = 0, Y = 0, Z = 0 }, Scale3D = { X = 1, Y = 1, Z = 1 } }
 
 -- One actor at the host mesh's transform; one instanced mesh component per
@@ -573,13 +593,16 @@ local function build_ism(world, b, t, pieces, tints, cull)
     b.actors[#b.actors + 1] = anchor
     local cls = load("/Script/Engine.InstancedStaticMeshComponent")
     if not cls then return 0 end
-    local byPath, order = {}, {}
+    local byKey, order = {}, {}
     for _, p in ipairs(pieces) do
-        if not byPath[p.path] then byPath[p.path] = {} order[#order + 1] = p.path end
-        table.insert(byPath[p.path], p)
+        local key = p.path .. "#" .. Placements.OverrideKey(p.overrides)
+        if not byKey[key] then byKey[key] = {} order[#order + 1] = key end
+        table.insert(byKey[key], p)
     end
     local n = 0
-    for _, path in ipairs(order) do
+    for _, key in ipairs(order) do
+        local group = byKey[key]
+        local path = group[1].path
         local mesh = load(path)
         if mesh then
             local ok, ism = pcall(function() return anchor:AddComponentByClass(cls, false, IDENTITY, false) end)
@@ -588,14 +611,15 @@ local function build_ism(world, b, t, pieces, tints, cull)
             pcall(function() ism:SetStaticMesh(mesh) end)
             pcall(function() ism:SetCollisionEnabled(0) end)
             if cull then pcall(function() ism:SetCullDistances(0, cull) end) end
-            for _, p in ipairs(byPath[path]) do
+            for _, p in ipairs(group) do
                 pcall(function() ism:AddInstance(Placements.Transform(p), false) end)
             end
             local count = 0
             pcall(function() count = ism:GetInstanceCount() end)
             n = n + count
+            apply_overrides(ism, group[1].overrides)
             local tintName = nil
-            for _, p in ipairs(byPath[path]) do tintName = tintName or (tints and tints[p.group]) end
+            for _, p in ipairs(group) do tintName = tintName or (tints and tints[p.group]) end
             if tintName then tint({ ism }, tintName) end
         else
             U.log_once("mesh" .. path, "Hybrid look: mesh " .. path .. " could not be loaded")
@@ -618,6 +642,11 @@ local function continue_actors(b)
             if a then
                 b.actors[#b.actors + 1] = a
                 if b.cull then pcall(function() a.StaticMeshComponent:SetCullDistance(b.cull) end) end
+                if p.overrides then
+                    local comp = nil
+                    pcall(function() comp = a.StaticMeshComponent end)
+                    if U.valid(comp) then apply_overrides(comp, p.overrides) end
+                end
                 local tintName = b.tints and b.tints[p.group]
                 if tintName then tint(mesh_components(a), tintName) end
             end
@@ -660,8 +689,8 @@ local function apply_placement(world, b, h, hybridId)
         local n = build_ism(world, b, b.t, pieces, tintTables, cull)
         if n > 0 then
             b.instances = n
-            U.log(string.format("%s look: %d of %d piece(s) instanced on %s (%s) in %.1f ms",
-                hybridId, n, #shape.attachments, short, name, (os.clock() - t0) * 1000))
+            U.log(string.format("%s look: %d of %d piece(s) instanced on %s (%s, %s) in %.1f ms",
+                hybridId, n, #shape.attachments, short, name, tostring(data.file), (os.clock() - t0) * 1000))
             return true
         end
         for _, a in ipairs(b.actors) do if U.valid(a) then pcall(function() a:K2_DestroyActor() end) end end
