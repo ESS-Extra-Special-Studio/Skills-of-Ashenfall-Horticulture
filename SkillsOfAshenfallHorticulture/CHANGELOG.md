@@ -2,19 +2,80 @@
 
 ## 1.0.0 (2026-10-05)
 
-- Horticulture, levels 1 to 25 (3,152 XP), on ESL:DragonWilds 1.0.0. Skill id `Horticulture`.
-- Unlocks at Historian 25 and Farming 25 once the character has read the Observances of Brassica Prime.
-- The Annotated Hymnal: a lore book on the grass beside the wild cabbage near the Wise Old Man in Bramblemead Valley, read through the game's own lore popup. Three leaves of mod lore. It lies along the slope of the ground under it, so no corner sinks into a hillside. Below Historian 25 it cannot be deciphered.
-- Splicing: G takes cuttings from crops, saplings and trees into a six-cutting satchel and grafts them onto the crops, saplings and trees you planted. Crop cuttings take on crops and trees; tree cuttings only on trees. Tree cuttings need a logging axe in hand that can fell the tree. Cuttings and hosts open at Horticulture 1 to 22, and need a vanilla level from the plant's tier, as cutting or host: crops the Farming level for their farm plot (ash plot 1, oak plot 10), trees the Woodcutting level for the axe that fells them (ash 1, oak 10, willow 20) plus Farming 20 (Tree Farming). Greyed wheel slices and refusal cards say what is missing. Alt+G always takes a cutting; Shift+G selects the next one.
-- At dawn each graft takes or is rejected (the first always takes). A graft that takes becomes a hybrid you can see: five flagships (Tuberwood Ash, Brassitato, Brassica-Oak, Sheaf Ash, Weeping Oak), three more to find, and a hybrid look for every other pairing: all 150 that open by Horticulture 25, built from the generic look data (the host's socket set and the cutting's produce). Crops nestle among a crop's leaves, hang from a tree's branches, and a tree cutting grows as a limb. No scale-ups anywhere.
-- The five flagship looks are built from placement data (`Scripts\placements\`), matched to the host tree's actual mesh and drawn with one instanced mesh per mesh type, so a hybrid tree costs one actor. Tuberwood Ash is an ash tree bearing potatoes in its canopy. The mod's pak (`SoAHorticulture_P`, about 28 MB, in the mod folder) adds the stalks fruit hangs from, the Primelets' faces and the baked fruit layers (154 meshes: 14 ash, oak and willow tree and sapling shapes, each with 11 produce, plus the flagship layouts); without it fruit sits against the bark. Optional Action Wheel support (the wheel in ESL:DragonWilds, or the standalone mod): the wheel names hybrids and Primelets, and Horticulture's own tag stands aside while it does. With the wheel installed, hold Z to pick, graft (a sub-wheel of your cuttings), take cuttings, check a graft and look after the Primelet, with greyed slices saying why; the keys are unchanged. The newest version of each placement file is used, and per-piece material overrides in the data are applied (the Weeping Oak's willow fronds are recoloured green).
-- Cabbage onto cabbage: usually a Doubled Cabbage; 1.5% of the time (`primelet_chance`) a Brassica Primelet climbs out of the plot. It has a secret catalogue entry, is raised from Sprout to Brassica Primelet to Mini Brassica Prime by tending it once a day (E or G), and goes into the satchel (Alt+G) to be set down at home (G), where a grown Mini takes a pot. Each has a personality and a name ("Lord Savoy the Pompous"); a Mini Brassica Prime talks, in a speech bubble above its pot, when talked to (E after tending), when moved, and now and then on its own (`primelet_chattiness`: off, quiet, normal, chatty). Any number can be raised. They are saved with the character and the world; Primelets from earlier saves get a personality and a name on load.
-- A hybrid is saved as an ordered list of plants (splicing save version 2; version 1 files are converted on load), ready for a third graft later. Hybrid looks also accept per-hybrid placement data (`looks\<HybridId>.txt`).
-- Hybrid trees can be picked once a day for real items (potatoes from a Tuberwood Ash); hybrid crops add the cutting's crop to the harvest.
-- Rootstock harvests: crop cuttings come only from your farm plots (not wild crops, not a crop sown today). A tree takes only a prime crop cutting, from a watered, composted crop in a plot of at least its tier, one per plot per crop cycle. A crop on a tree gives four picks, each about one plot harvest of that crop (never over half a tended plot's) plus a little vanilla Farming XP (a quarter of the plot harvest's, at most 8), then goes dormant ("Tuberwood Ash (dormant)") until a new prime cutting of that crop wakes it (15 XP). A crop on a crop adds its extra through the game's own compost (1.5x) and water (1.15x) bonuses when the plot is of the crop's tier, plus one for a prime cutting: about 14 to 16 for a tended plot against 10. Felling a hybrid tree drops at most one pick's worth, only with a pick left, and pays no XP. Tending (prime cutting, watered and composted host plot, Farming above 25) raises the graft chance. Every number is in `config.txt`. Saves from earlier builds keep their hybrids; crop-on-tree hybrids start with four picks.
-- Hybrid fruit hangs at its natural size (Tuberwood Ash v013, Brassica-Oak v005, Sheaf Ash v004, Brassitato v003, Weeping Oak v003), none lies on the ground, and the loader skips any ground or fallen group and caps fruit at 1.0x (whole wheat and flax plants at 0.55x). Host plants are never scaled. The fruit sways with the game's wind (`sway`, `sway_degrees`). Where the pak supplies a baked fruit layer for a tree shape (listed in `Scripts\placements\hort_fruit_layers_vNNN.lua`), that one mesh replaces the fruit clusters and moves with the tree's own leaf wind, and the tree is left out of the Lua sway. E at a grown hybrid tree picks, as G. A hybrid tree's name shows in the game's own prompt ("Tuberwood Ash" instead of "Ash Tree"), set once per tree and restored when it is felled. A small tag above the prompt names the Brassica Primelet you face (`name_tag`). Each hybrid's leaves (or crop) take on its own mutated colour (`mutation_tint`): hand-picked for the flagships (Tuberwood Ash a deep blue-violet, Sheaf Ash harvest gold), and one of eight colours chosen by the pairing for every other combination, so the same pair always looks the same. Bark keeps its colour, and the tint is reapplied if the game swaps the tree's materials.
-- Discovery Catalogue: each new hybrid is revealed with an "X DISCOVERED" card and bonus XP. Reveals, and every other Horticulture card, wait until the game's level-up banner has gone; reveals stay up for 9 seconds. The End panel is wrapped to a narrow column so a card never covers it. The End panel updates while it is open. The first harvest of each of the game's 24 crops is kept as the Vanilla Plants section.
-- Farm plots are read on current game builds, where the plot no longer exposes `VisibleState`: the crop and stage come from the plant's mesh and the slot's own checks (harvestable, diseased, watered, fertilised), so plot crops give cuttings, take grafts and pay farming XP. Older builds still use `VisibleState`.
-- Ordinary farming pays about a third of what it did in testing builds; splicing is the main source of XP.
-- End shows Horticulture, the satchel and the catalogue. Shift+End rereads the Observances once read. `config.txt` (written on first run) sets `status_key`, `action_key`, `primelet_chance`, `quiet`, `name_tag`, `mutation_tint`, `primelet_chattiness`, `sway`, `sway_degrees`, the Rootstock numbers (`wild_cuttings`, `vigour_picks`, `prime_cooldown_dawns`, `pick_per_farming_levels`, `pick_farming_xp`, `pick_farming_xp_share`, `pick_farming_xp_cap`, `compost_multiplier`, `water_multiplier`, `prime_share`, `farming_scale_cap`) and `debug`.
-- Badge from the icon plan: a green leaf whose right half becomes a DNA double helix.
+The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historian 1.0.0.
+
+### Features
+
+**The skill**
+
+- Horticulture, levels 1 to 25 (3,152 XP).
+- Hidden until you have Historian 25 and Farming 25 and have read the Observances of Brassica Prime.
+- The Annotated Hymnal lies on the grass by the wild cabbage patch near the Wise Old Man in Bramblemead Valley. It opens in the game's own lore popup. Below Historian 25 you can't read the older writing under the hymns. Reading it takes you to level 2.
+- End shows your level, XP, satchel and Discovery Catalogue. Shift+End rereads the Observances.
+
+**Splicing**
+
+- Aim at a plant and press G. It takes a cutting, or grafts your selected cutting onto a crop, sapling or tree you planted. Alt+G always takes a cutting. Shift+G selects the next one in your satchel.
+- The satchel holds six cuttings. One cutting per plant per day, and a cutting wilts after two dawns.
+- Crop cuttings only come from your farm plots. Wild crops and crops sown today won't give one.
+- Crop cuttings take on crops and trees. Tree cuttings only take on trees, and you need a logging axe in hand that could fell the tree.
+- New cuttings and hosts open from Horticulture 1 to 22. Each plant also needs a vanilla level for its tier: Farming 1 for ash-plot crops and Farming 10 for oak-plot crops; Woodcutting 1, 10 or 20 for ash, oak or willow, plus Farming 20 for any tree. Greyed wheel slices and refusal cards tell you what's missing.
+- At dawn each graft takes or is rejected. Your first graft always takes. After that it's about 60%, a little better for every level you are above the cutting's.
+- **Prime cuttings.** A watered, composted crop in a plot of its own tier or better gives a prime cutting, once per crop cycle. Trees only take prime crop cuttings. A prime cutting, a watered plot and a composted plot each raise a graft's chance.
+
+**Hybrids**
+
+- A graft that takes changes the plant you see. There are five flagships (Tuberwood Ash, Brassitato, Brassica-Oak, Sheaf Ash and, from Horticulture 20, Weeping Oak) and three more to find. Each of the 150 pairings that open by level 25 has its own look and catalogue entry.
+- Everything grows at natural size. Crops nestle among a crop's leaves or hang from a tree's branches, and a tree cutting grows as a limb.
+- Each hybrid's leaves take on a mutated colour. The flagships' are hand-picked (Tuberwood Ash goes deep blue-violet). Every other pair gets one of eight colours, always the same for the same pair.
+- Fruit on hybrid trees sways with the wind. Where the mod's pak has a baked fruit layer for that tree, the fruit moves with the tree's own leaves.
+- Hybrid trees show their own name in the game's prompt: "Tuberwood Ash", not "Ash Tree".
+- Each new hybrid gets a Discovery Catalogue card and bonus XP. Discovery cards wait until the game's level-up banner has gone.
+
+**Harvesting**
+
+- Pick a hybrid tree once a day with G, or with E at a grown tree.
+- A crop on a tree gives about one plot harvest of that crop per pick, plus one for every 10 Farming levels. It never gives more than half a watered, composted plot's harvest.
+- Tree picks also pay a little Farming XP: a quarter of what the same plot harvest pays, at most 8.
+- After four picks the tree goes dormant ("Tuberwood Ash (dormant)"). Graft another prime cutting of the same crop to wake it for four more.
+- A crop on a crop adds the cutting's crop to the plot's normal harvest. The game's compost and water bonuses apply when the plot is of that crop's tier, and a prime cutting adds one more. A prime Brassitato in a watered, composted plot gives 6 cabbages on top of the potatoes.
+- Felling a hybrid tree ends it. It keeps its look as it falls, and if it had a pick left that day, one pick's worth of produce drops where the canopy lands. Felling pays no XP.
+
+**The Brassica Primelet**
+
+- Now and then (1.5% by default), a cabbage grafted onto a cabbage becomes a Brassica Primelet instead of a Doubled Cabbage. It gets a secret catalogue entry.
+- Tend it once a day (E or G). Five tended days take it from Sprout to Brassica Primelet to Mini Brassica Prime.
+- Each one has its own personality and name, such as "Lord Savoy the Pompous".
+- A Mini Brassica Prime talks in a speech bubble above its pot: when you talk to it, when you move it, and now and then on its own.
+- Alt+G picks it up and G sets it down. A grown Mini takes a pot the first time you set it down. Raise as many as you like.
+
+**XP**
+
+- Splicing: cutting 8, graft 20, graft takes 45 (rejected 10), new hybrid +50, new flagship +200, tree pick or hybrid harvest 25, waking a dormant tree 15.
+- Brassica Primelet: +200 when found, 30 for each stage, 5 a day for tending until it's grown.
+- Ordinary farming still pays a little: sowing 10, watering 5, composting 10, weeding 3, curing 13, harvesting 23. The first sowing and first harvest of each crop pay +17 and +33, and the first harvest of each of the game's 24 crops goes in the catalogue's Vanilla Plants section.
+
+**Action Wheel**
+
+- With the wheel in ESL:DragonWilds (or the older standalone mod), hold Z to pick, graft from a sub-wheel of your cuttings, take a cutting, check a graft or look after a Primelet. Greyed slices say why. The keys still work without it.
+
+**Settings**
+
+- `config.txt` is written on first run: `status_key`, `action_key`, `primelet_chance`, `quiet`, `name_tag`, `mutation_tint`, `primelet_chattiness`, `sway`, `sway_degrees` and `debug`, plus the harvest numbers `wild_cuttings`, `vigour_picks`, `prime_cooldown_dawns`, `pick_per_farming_levels`, `pick_farming_xp`, `pick_farming_xp_share`, `pick_farming_xp_cap`, `compost_multiplier`, `water_multiplier`, `prime_share` and `farming_scale_cap`.
+
+### Changes
+
+- Ordinary farming pays about a third of what it did in the test builds. Splicing is now the main source of XP.
+
+### Fixes
+
+- Fixed a crash the first time you picked a farm plot in build mode. Horticulture now pauses its background work while you build and for 3 seconds after, and plots still on the build cursor are left alone.
+- Farm plots are read correctly on the current game build, so plot crops give cuttings, take grafts and pay Farming XP.
+- The hymnal lies along sloping ground instead of sinking a corner into the hillside.
+
+### Technical notes
+
+- Skill id `Horticulture`. Progress is in `<character id>.Horticulture.txt` and the satchel and grafts in `<character id>.Horticulture.splicing.txt`, both in `%LOCALAPPDATA%\RSDragonwilds\Saved\ESLDragonWilds`.
+- The splicing save (version 2) stores a hybrid as an ordered list of plants, ready for a third graft later. Version 1 files convert on load.
+- Hybrid looks come from `Scripts\placements\` (the newest version of each file is used), with per-hybrid overrides in `looks\<HybridId>.txt`.
+- The mod's pak, `SoAHorticulture_P` (`.pak`, `.ucas`, `.utoc`), adds the fruit stalks, the Primelets' faces and the baked fruit layers listed in `Scripts\placements\hort_fruit_layers_vNNN.lua`. Without it, fruit sits against the bark and the Primelets have no faces.
