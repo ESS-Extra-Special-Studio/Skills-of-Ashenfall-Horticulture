@@ -78,4 +78,4 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 - Skill id `Horticulture`. Progress is in `<character id>.Horticulture.txt` and the satchel and grafts in `<character id>.Horticulture.splicing.txt`, both in `%LOCALAPPDATA%\RSDragonwilds\Saved\ESLDragonWilds`.
 - The splicing save (version 2) stores a hybrid as an ordered list of plants, ready for a third graft later. Version 1 files convert on load.
 - Hybrid looks come from `Scripts\placements\` (the newest version of each file is used), with per-hybrid overrides in `looks\<HybridId>.txt`.
-- The mod's pak, `SoAHorticulture_P` (`.pak`, `.ucas`, `.utoc`), adds the fruit stalks, the Primelets' faces and the baked fruit layers listed in `Scripts\placements\hort_fruit_layers_vNNN.lua`. Without it, fruit sits against the bark and the Primelets have no faces.
+- The mod's pak, `SoAHorticulture_P` (`.pak`, `.ucas`, `.utoc`, about 28 MB together), adds the fruit stalks, the Primelets' faces and the baked fruit layers listed in `Scripts\placements\hort_fruit_layers_vNNN.lua`. Without it, fruit sits against the bark and the Primelets have no faces.
