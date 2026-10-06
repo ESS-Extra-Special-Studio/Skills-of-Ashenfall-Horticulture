@@ -142,18 +142,9 @@ local function slot_location(slot)
 end
 
 local function read_state(slot)
-    local ok, st = pcall(function()
-        local v = slot.VisibleState
-        return {
-            stage = tonumber(v.PlotStage),
-            growth = tonumber(v.GrowthStage),
-            water = tonumber(v.WateringProgress) or 0,
-            fert = tonumber(v.FertilizingProgress) or 0,
-            net = tonumber(v.PlantDataNetID),
-        }
-    end)
+    local ok, st = pcall(Crops.PlotState, slot)
     if ok and st and st.stage then return st end
-    U.log_once("nostate", "Farm plot state could not be read (" .. tostring(st) .. "); Horticulture XP from farming is off")
+    U.log_once("nostate", "A farm plot's state could not be read (" .. tostring(st) .. "); that plot pays no Horticulture XP")
     return nil
 end
 
@@ -287,12 +278,13 @@ local function tick()
         if U.valid(slot.obj) then
             seen[slot.key] = true
             local cur = read_state(slot.obj)
-            if not cur then return end
-            local old = snap[slot.key]
-            snap[slot.key] = cur
-            if old then
-                changes[#changes + 1] = { slot = slot, old = old, cur = cur }
-                if cur.water > old.water + 0.001 then watered = watered + 1 end
+            if cur then
+                local old = snap[slot.key]
+                snap[slot.key] = cur
+                if old then
+                    changes[#changes + 1] = { slot = slot, old = old, cur = cur }
+                    if cur.water > old.water + 0.001 then watered = watered + 1 end
+                end
             end
         end
     end

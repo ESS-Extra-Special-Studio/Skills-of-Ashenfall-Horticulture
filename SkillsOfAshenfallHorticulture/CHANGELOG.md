@@ -12,6 +12,7 @@
 - A hybrid is saved as an ordered list of plants (splicing save version 2; version 1 files are converted on load), ready for a third graft later. Hybrid looks also accept per-hybrid placement data (`looks\<HybridId>.txt`).
 - Hybrid trees can be picked once a day for real items (potatoes from a Tuberwood Ash); hybrid crops add the cutting's crop to the harvest.
 - Discovery Catalogue: each new hybrid is revealed with an "X DISCOVERED" card and bonus XP. The first harvest of each of the game's 24 crops is kept as the Vanilla Plants section.
+- Farm plots are read on current game builds, where the plot no longer exposes `VisibleState`: the crop and stage come from the plant's mesh and the slot's own checks (harvestable, diseased, watered, fertilised), so plot crops give cuttings, take grafts and pay farming XP. Older builds still use `VisibleState`.
 - Ordinary farming pays about a third of what it did in testing builds; splicing is the main source of XP.
 - End shows Horticulture, the satchel and the catalogue. Shift+End rereads the Observances once read. `config.txt` (written on first run) sets `status_key`, `action_key`, `quiet` and `debug`.
 - Badge from the icon plan: a green leaf whose right half becomes a DNA double helix.

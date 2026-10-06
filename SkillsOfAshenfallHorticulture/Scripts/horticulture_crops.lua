@@ -93,8 +93,125 @@ function Crops.Resolve(net)
     return nil
 end
 
+-- Build 25632050 and later keep the plot state natively: FarmSlotComponent
+-- has no VisibleState property. What Lua can still read is the slot's
+-- PlantMeshComponent.StaticMesh, GetSoilState, CanHarvest, CanHealDisease,
+-- IsFullyWatered and IsFullyFertilized, and each FarmPlantDataAsset's
+-- Stages[i].Healthy/Diseased/Dead.Mesh. The mesh names the crop and stage.
+local byMesh, byKey = {}, {}
+local meshBuilt, meshAssets = -100, -1
+
+local function index_meshes()
+    local t = os.clock()
+    local assets = U.live_of("FarmPlantDataAsset")
+    if #assets == meshAssets and t - meshBuilt < 30 then return end
+    meshBuilt, meshAssets = t, #assets
+    for _, data in ipairs(assets) do
+        local info = describe(data)
+        if info then
+            byKey[info.key] = info
+            pcall(function()
+                local list = {}
+                data.Stages:ForEach(function(_, elem) list[#list + 1] = elem:get() end)
+                for i, st in ipairs(list) do
+                    for _, cond in ipairs({ "Healthy", "Diseased", "Dead" }) do
+                        pcall(function()
+                            local mesh = st[cond].Mesh
+                            if U.valid(mesh) then
+                                local name = U.fname(mesh)
+                                byMesh[name] = byMesh[name] or { key = info.key, stage = i, cond = cond }
+                            end
+                        end)
+                    end
+                end
+            end)
+        end
+    end
+end
+
+local function call(obj, fn)
+    local ok, v = pcall(function() return obj[fn](obj) end)
+    if ok then return v end
+    return nil
+end
+
+local IDLE, PLANTED, HARVESTABLE, WEEDS, DISEASED, DEAD = 0, 1, 2, 3, 4, 5
+
+local function from_mesh(slot)
+    local plant = nil
+    pcall(function() plant = slot.PlantMeshComponent end)
+    if not U.valid(plant) then return nil end
+    local visible = call(plant, "IsVisible") == true
+    local name = nil
+    pcall(function() name = U.fname(plant.StaticMesh) end)
+    local st = {
+        water = call(slot, "IsFullyWatered") == true and 1 or 0,
+        fert = call(slot, "IsFullyFertilized") == true and 1 or 0,
+    }
+    if not visible or not name or name == "" then
+        st.stage = IDLE
+        return st
+    end
+    local hit = byMesh[name]
+    if not hit then
+        index_meshes()
+        hit = byMesh[name]
+    end
+    if not hit and name:lower():find("weed", 1, true) then hit = { key = "FPD_Weeds", stage = 1 } end
+    if not hit then
+        U.log_once("mesh" .. name, "Plot mesh " .. name .. " matches no crop; that plot is skipped")
+        return nil
+    end
+    if hit.key == "FPD_Weeds" then
+        st.stage = WEEDS
+        return st
+    end
+    st.net, st.growth = hit.key, hit.stage - 1
+    if hit.cond == "Dead" then
+        st.stage = DEAD
+    elseif call(slot, "CanHealDisease") == true or hit.cond == "Diseased" then
+        st.stage = DISEASED
+    elseif call(slot, "CanHarvest") == true then
+        st.stage = HARVESTABLE
+    else
+        st.stage = PLANTED
+    end
+    return st
+end
+
+local stateWay = nil
+
+-- { stage (EFarmPlotStage), growth, water, fert, net } or nil. net is the
+-- network id when VisibleState is readable, else the FPD_ asset name.
+function Crops.PlotState(slot)
+    if stateWay ~= "mesh" then
+        local ok, st = pcall(function()
+            local v = slot.VisibleState
+            return {
+                stage = tonumber(v.PlotStage),
+                growth = tonumber(v.GrowthStage),
+                water = tonumber(v.WateringProgress) or 0,
+                fert = tonumber(v.FertilizingProgress) or 0,
+                net = tonumber(v.PlantDataNetID),
+            }
+        end)
+        if ok and st and st.stage then
+            if stateWay ~= "visible" then U.log("Plot state read from VisibleState") end
+            stateWay = "visible"
+            return st
+        end
+    end
+    local st = from_mesh(slot)
+    if st and stateWay ~= "mesh" then
+        U.log("Plot state read from the plant mesh and slot functions")
+        stateWay = "mesh"
+    end
+    return st
+end
+
 -- A stable catalogue key: the asset name when known, else the network id.
 function Crops.Key(net)
+    if type(net) == "string" and net:find("^FPD_") then return net, Crops.NameOf(net) end
     local c = Crops.Resolve(net)
     if c then return c.key, c.name end
     return "net" .. tostring(net), "an unnamed crop"
@@ -110,6 +227,7 @@ local NAMES = {
 }
 
 function Crops.NameOf(key)
+    if byKey[key] then return byKey[key].name end
     for _, c in pairs(cache) do
         if c.key == key then return c.name end
     end

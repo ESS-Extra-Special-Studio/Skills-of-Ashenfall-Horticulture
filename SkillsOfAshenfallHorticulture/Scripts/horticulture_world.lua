@@ -141,14 +141,11 @@ end
 local function plot_info(slot)
     local loc = slot_location(slot)
     if not loc then return nil end
-    local st = nil
-    pcall(function()
-        local v = slot.VisibleState
-        st = { stage = tonumber(v.PlotStage), net = tonumber(v.PlantDataNetID) }
-    end)
+    local st = Crops.PlotState(slot)
     if not st then return nil end
     local species = nil
-    if st.net and st.net > 0 and st.stage ~= 0 and st.stage ~= 3 then
+    local named = type(st.net) == "string" or (tonumber(st.net) or 0) > 0
+    if named and st.stage ~= 0 and st.stage ~= 3 then
         species = Crops.Key(st.net)
     end
     local tier = tonumber(prop(slot, "PlotTier")) or 1
