@@ -1273,6 +1273,39 @@ r = cangraft("FPD_Cabbage", T({"species": "FPD_Potato", "kind": "plot", "planted
 check("gate: crop donor and crop host both checked", r.startswith("false|Needs Farming 1"), r)
 r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 20})}), 1)
 check("gate: Farming 20 grafts potato onto ash", r.startswith("true"), r)
+
+# Derived gates: crop -> lowest plot tier in its FPD Farming.Tiers tags (pak
+# scan 2026-10-06); tree -> axe power that fells it. Tier -> level is ours.
+plots = L.eval("function() local R = require('horticulture_splice_rules') local t = {} for k, c in pairs(R.CROPS) do t[#t + 1] = k .. '=' .. tostring(c.plot) end table.sort(t) return table.concat(t, ',') end")()
+want_plots = {"FPD_Cabbage": 1, "FPD_Potato": 1, "FPD_Wheat": 1, "FPD_Redberry": 1, "FPD_Flax": 1, "FPD_Harralander": 1,
+              "FPD_Marrentill": 1, "FPD_Kwuarm": 1, "FPD_Onion": 2, "FPD_Tomato": 2, "FPD_Dwellberry": 2}
+check("derived: every crop's plot tier matches the game data", plots == ",".join(sorted(f"{k}={v}" for k, v in want_plots.items())), plots)
+needs = L.eval("""function() local R = require('horticulture_splice_rules') local t = {}
+    for _, s in ipairs({ 'FPD_Cabbage', 'FPD_Onion', 'FPD_Dwellberry', 'Ash', 'Oak', 'Willow', 'Maple', 'Yew', 'Magic' }) do
+        local p = {} for _, g in ipairs(R.SkillGates(s)) do p[#p + 1] = g.skill .. ' ' .. g.level end
+        t[#t + 1] = s .. ':' .. table.concat(p, '+') end
+    return table.concat(t, ',') end""")()
+check("derived: the gate table", needs == "FPD_Cabbage:Farming 1,FPD_Onion:Farming 10,FPD_Dwellberry:Farming 10,"
+      "Ash:Woodcutting 1+Farming 20,Oak:Woodcutting 10+Farming 20,Willow:Woodcutting 20+Farming 20,"
+      "Maple:Woodcutting 40+Farming 20,Yew:Woodcutting 50+Farming 20,Magic:Woodcutting 60+Farming 20", needs)
+r = cancut(T({"species": "Oak", "kind": "tree", "level": 8, "axePower": 3, "skills": T({"Farming": 30, "Woodcutting": 9})}))
+check("gate: an oak cutting needs Woodcutting 10 (bronze axe tier)", r == "false|Needs Woodcutting 10", r)
+r = cancut(T({"species": "Oak", "kind": "tree", "level": 8, "axePower": 3, "skills": T({"Farming": 30, "Woodcutting": 10})}))
+check("gate: Woodcutting 10 and a bronze axe take the oak cutting", r.startswith("true"), r)
+r = cancut(T({"species": "Willow", "kind": "tree", "level": 20, "axePower": 4, "skills": T({"Farming": 30, "Woodcutting": 19})}))
+check("gate: a willow cutting needs Woodcutting 20 (iron axe tier)", r == "false|Needs Woodcutting 20", r)
+r = cancut(T({"species": "FPD_Onion", "kind": "crop", "level": 18, "alive": True, "skills": T({"Farming": 9})}))
+check("gate: an onion cutting needs Farming 10 (oak plot tier)", r == "false|Needs Farming 10", r)
+r = cancut(T({"species": "FPD_Wheat", "kind": "crop", "level": 10, "alive": True, "skills": T({"Farming": 1})}))
+check("gate: wheat grows in the ash plot, Farming 1", r.startswith("true"), r)
+r = cangraft("Oak", T({"species": "Ash", "kind": "tree", "planted": True, "skills": T({"Farming": 30, "Woodcutting": 9})}), 8)
+check("gate: an oak donor needs Woodcutting 10", r == "false|Needs Woodcutting 10 for oak", r)
+r = cangraft("FPD_Potato", T({"species": "Willow", "kind": "tree", "planted": True, "skills": T({"Farming": 30, "Woodcutting": 15})}), 20)
+check("gate: a willow host needs Woodcutting 20", r == "false|Needs Woodcutting 20 for willow", r)
+r = cangraft("FPD_Tomato", T({"species": "FPD_Potato", "kind": "plot", "planted": True, "stage": 1, "skills": T({"Farming": 9})}), 18)
+check("gate: a tomato donor needs Farming 10", r == "false|Needs Farming 10 for tomato", r)
+r = cangraft("FPD_Potato", T({"species": "FPD_Dwellberry", "kind": "plot", "planted": True, "stage": 1, "skills": T({"Farming": 9})}), 22)
+check("gate: a dwellberry host needs Farming 10", r == "false|Needs Farming 10 for dwellberry", r)
 W2 = L.eval('(require("horticulture_wheel"))')
 check("wheel: 'Needs Farming 20' is greyed as a level lock", W2.LevelLocked("Needs Farming 20 for ash") is True and W2.LevelLocked("Needs Woodcutting 20") is True
       and W2.LevelLocked("Your axe is too weak") is False)

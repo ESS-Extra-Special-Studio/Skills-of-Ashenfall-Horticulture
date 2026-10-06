@@ -66,19 +66,20 @@ Rules.TREES = {
 local PLANT = "/Game/Gameplay/Items/Resources/Plant/"
 local FOOD = "/Game/Gameplay/Items/Consumables/Food/Items/v3/"
 
--- Crops, keyed by their FarmPlantDataAsset name.
+-- Crops, keyed by their FarmPlantDataAsset name. plot: the lowest plot tier
+-- in the asset's Farming.Tiers tags (the game data, used by SkillGates).
 Rules.CROPS = {
-    FPD_Cabbage = { name = "Cabbage", band = 1, tier = 1, item = PLANT .. "ITEM_Resources_Cabbage" },
-    FPD_Potato = { name = "Potato", band = 5, tier = 1, item = PLANT .. "ITEM_Resources_Potato" },
-    FPD_Wheat = { name = "Wheat", band = 10, tier = 1, item = PLANT .. "ITEM_Resources_Wheat" },
-    FPD_Redberry = { name = "Redberry", band = 10, tier = 1, item = FOOD .. "ITEM_Consumable_Fruit_Redberry" },
-    FPD_Flax = { name = "Flax", band = 13, tier = 1, item = PLANT .. "ITEM_Resources_Flax" },
-    FPD_Harralander = { name = "Harralander", band = 15, tier = 1.5 },
-    FPD_Marrentill = { name = "Marrentill", band = 15, tier = 1.5 },
-    FPD_Onion = { name = "Onion", band = 18, tier = 2, item = PLANT .. "ITEM_Resources_Onion" },
-    FPD_Tomato = { name = "Tomato", band = 18, tier = 2, item = PLANT .. "ITEM_Resources_Tomato" },
-    FPD_Kwuarm = { name = "Kwuarm", band = 22, tier = 1.5 },
-    FPD_Dwellberry = { name = "Dwellberry", band = 22, tier = 2, item = FOOD .. "ITEM_Consumable_Fruit_Dwellberry" },
+    FPD_Cabbage = { name = "Cabbage", band = 1, tier = 1, plot = 1, item = PLANT .. "ITEM_Resources_Cabbage" },
+    FPD_Potato = { name = "Potato", band = 5, tier = 1, plot = 1, item = PLANT .. "ITEM_Resources_Potato" },
+    FPD_Wheat = { name = "Wheat", band = 10, tier = 1, plot = 1, item = PLANT .. "ITEM_Resources_Wheat" },
+    FPD_Redberry = { name = "Redberry", band = 10, tier = 1, plot = 1, item = FOOD .. "ITEM_Consumable_Fruit_Redberry" },
+    FPD_Flax = { name = "Flax", band = 13, tier = 1, plot = 1, item = PLANT .. "ITEM_Resources_Flax" },
+    FPD_Harralander = { name = "Harralander", band = 15, tier = 1.5, plot = 1 },
+    FPD_Marrentill = { name = "Marrentill", band = 15, tier = 1.5, plot = 1 },
+    FPD_Onion = { name = "Onion", band = 18, tier = 2, plot = 2, item = PLANT .. "ITEM_Resources_Onion" },
+    FPD_Tomato = { name = "Tomato", band = 18, tier = 2, plot = 2, item = PLANT .. "ITEM_Resources_Tomato" },
+    FPD_Kwuarm = { name = "Kwuarm", band = 22, tier = 1.5, plot = 1 },
+    FPD_Dwellberry = { name = "Dwellberry", band = 22, tier = 2, plot = 2, item = FOOD .. "ITEM_Consumable_Fruit_Dwellberry" },
 }
 
 -- Logging axes by item name, for when the item's own power cannot be read.
@@ -93,28 +94,35 @@ Rules.AXES = {
 }
 
 -- Vanilla skill levels a plant needs before it can be spliced: taken as a
--- cutting, or used in a graft as the cutting or the host. From the game's
--- own data (build 25632050, read 2026-10-06; sources in the Dragonwilds
--- docs, HORTICULTURE_SKILL_GATES.md):
---   - No seed, crop or plot recipe asks for a Farming level. Plots unlock
---     when their logs are first picked up; crops need only farming itself
---     (Growing Pains, Farming 1). The recipes that do name Farming are tools.
---   - No recipe asks for Woodcutting; a tree is gated by the axe that can
---     fell it (power, above, checked by CanCut).
---   - The one vanilla level that gates a plant is Tree Farming, Farming 20:
---     planting a tree.
--- Keyed by kind, then by species to override a kind.
-Rules.SKILL_GATES = {
-    crop = { { skill = "Farming", level = 1 } },
-    tree = { { skill = "Farming", level = 20 } },
-}
+-- cutting, or used in a graft as the cutting or the host. Derived from the
+-- vanilla tier that gates growing or felling it (build 25632050, read
+-- 2026-10-06; sources in the Dragonwilds docs, HORTICULTURE_SKILL_GATES.md):
+--   - A crop needs the lowest farm plot tier its FarmPlantDataAsset accepts
+--     (Farming.Tiers tags: Ash plot 1, Oak 2, Willow 3, Yew 4).
+--   - A tree needs the logging axe power that fells it (TREES.power).
+--   - Trees also need Tree Farming, Farming 20 (planting a tree).
+-- The game unlocks plots and axes by picking items up, never at a Farming
+-- or Woodcutting level, so the level for each tier below is Horticulture's
+-- own: the first plot and the first axe at level 1, each next one ten
+-- levels later (no logging axe has power 2).
+Rules.PLOT_TIER_LEVEL = { 1, 10, 20, 30 }
+Rules.AXE_POWER_LEVEL = { [1] = 1, [3] = 10, [4] = 20, [5] = 30, [6] = 40, [7] = 50, [8] = 60 }
+Rules.TREE_FARMING_LEVEL = 20
+-- Per-species override: a list of { skill = "...", level = n }.
 Rules.SKILL_GATE_SPECIES = {}
 
 function Rules.SkillGates(species)
     local own = Rules.SKILL_GATE_SPECIES[species]
     if own then return own end
-    if Rules.TREES[species] then return Rules.SKILL_GATES.tree end
-    if Rules.CROPS[species] then return Rules.SKILL_GATES.crop end
+    local t = Rules.TREES[species]
+    if t then
+        return {
+            { skill = "Woodcutting", level = Rules.AXE_POWER_LEVEL[t.power] or 1 },
+            { skill = "Farming", level = Rules.TREE_FARMING_LEVEL },
+        }
+    end
+    local c = Rules.CROPS[species]
+    if c then return { { skill = "Farming", level = Rules.PLOT_TIER_LEVEL[c.plot or 1] or 1 } } end
     return {}
 end
 

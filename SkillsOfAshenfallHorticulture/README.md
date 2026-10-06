@@ -10,7 +10,7 @@ Horticulture is the second Skills of Ashenfall skill. It is hidden until you ear
 - Skills of Ashenfall: Historian 1.0.0 or later (Required Dependency)
 - UE4SS for RuneScape: Dragonwilds (3.0.1, the "UE4SS Steam (latest)" build)
 
-Recommended companion: **Action Wheel** 1.0.0 or later (Optional Dependency). With it installed beside this mod, hold Z to choose Horticulture's actions from a wheel; see [Action Wheel](#action-wheel). Horticulture works the same without it.
+Action Wheel: ESL:DragonWilds 1.0.0 includes it, so nothing more to install. Hold Z to choose Horticulture's actions from a wheel; see [Action Wheel](#action-wheel). Horticulture works the same with the wheel turned off.
 
 ## Install
 
@@ -53,7 +53,7 @@ Horticulture then appears in your skills menu and on the character select screen
 
 Tree cuttings need a logging axe in your hand that could fell that tree, as the game asks when you chop it: stone for ash, bronze for oak, iron for willow.
 
-Splicing also asks for the vanilla level the game itself asks to grow the plant. Trees, as cuttings or as hosts, need **Farming 20**, where the game teaches Tree Farming; crops need Farming 1. The game has no per-crop Farming level and no Woodcutting level for any tree (it gates trees by the axe), so these are the only vanilla levels involved. A greyed wheel slice or a refusal card says what is missing ("Needs Farming 20 for oak").
+Splicing also asks for a vanilla level, set by the tier the game uses for that plant. A crop needs the Farming level for the farm plot it grows in: Farming 1 for the ash plot (cabbage, potato, wheat, redberry, flax, harralander, marrentill, kwuarm), Farming 10 for the oak plot (onion, tomato, dwellberry). A tree needs the Woodcutting level for the axe that fells it: Woodcutting 1 for ash (stone axe), 10 for oak (bronze), 20 for willow (iron); trees also need Farming 20, where the game teaches Tree Farming. This applies to taking a cutting, and to both plants in a graft. The game itself unlocks plots and axes by finding their materials, not at a level, so the level for each tier is Horticulture's: the first at 1, ten levels a tier after that. A greyed wheel slice or a refusal card says what is missing ("Needs Woodcutting 10 for oak").
 
 | Horticulture | New cuttings and hosts |
 |-------------:|------------------------|
@@ -135,7 +135,7 @@ The first run writes `config.txt` next to `enabled.txt`:
 
 ### Action Wheel
 
-With the Action Wheel (part of ESL:DragonWilds once it ships there, or the standalone `ActionWheel` mod in `~mods`), hold **Z** while aiming at a plant, or with nothing aimed at, and choose. The wheel names hybrids and Primelets by their own names; while it shows names, Horticulture's small name tag stands aside.
+With the Action Wheel (part of ESL:DragonWilds 1.0.0; the older standalone `ActionWheel` mod also works), hold **Z** while aiming at a plant, or with nothing aimed at, and choose. The wheel names hybrids and Primelets by their own names; while it shows names, Horticulture's small name tag stands aside.
 
 | Slice | On | Does |
 |-------|----|------|
