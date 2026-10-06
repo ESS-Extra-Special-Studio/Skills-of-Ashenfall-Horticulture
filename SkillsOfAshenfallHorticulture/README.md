@@ -1,6 +1,6 @@
 # Skills of Ashenfall: Horticulture
 
-A new skill for RuneScape: Dragonwilds, levels 1 to 25. Take cuttings, graft them onto the crops and trees you planted, and see what grows by dawn: an ash with potatoes at its roots, an oak hung with cabbages.
+A new skill for RuneScape: Dragonwilds, levels 1 to 25. Take cuttings, graft them onto the crops and trees you planted, and see what grows by dawn: an ash tree bearing potatoes, an oak hung with cabbages.
 
 Horticulture is the second Skills of Ashenfall skill. It is hidden until you earn it.
 
@@ -65,7 +65,7 @@ Tree cuttings need a logging axe in your hand that could fell that tree, as the 
 
 | Hybrid | Graft | From | Gives |
 |--------|-------|-----:|-------|
-| Tuberwood Ash | Potato onto ash | 5 | 3 potatoes a day, from the roots |
+| Tuberwood Ash | Potato onto ash | 5 | 3 potatoes a day, from the branches |
 | Brassitato | Cabbage onto potato | 5 | 2 cabbages with the potato harvest |
 | Brassica-Oak | Cabbage onto oak | 8 | 3 cabbages a day, from the canopy |
 | Sheaf Ash | Wheat onto ash | 10 | 4 wheat a day |

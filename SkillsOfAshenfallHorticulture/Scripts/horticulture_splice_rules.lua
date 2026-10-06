@@ -120,7 +120,7 @@ Rules.FLAGSHIPS = {
     ["FPD_Potato>Ash"] = {
         id = "TuberwoodAsh", name = "Tuberwood Ash", required = true, order = 1,
         products = { { species = "FPD_Potato", count = 3 } },
-        detail = "Potato grafted onto ash. Pick potatoes from its roots once a day.",
+        detail = "Potato grafted onto ash. Pick potatoes from its branches once a day.",
         lore = "An ash that has decided the interesting part of a tree is underground. It may have a point.",
     },
     ["FPD_Cabbage>Oak"] = {

@@ -459,8 +459,8 @@ lay = L.eval(r"""function()
     out[#out + 1] = "Brassitato=" .. #b .. ":" .. b[1].mesh
     local tub = Looks.Layout("TuberwoodAsh", "FPD_Potato", "tree", { height = 900, radius = 300 })
     local low = true
-    for _, piece in ipairs(tub) do if piece.z > 10 then low = false end end
-    out[#out + 1] = "tuberlow=" .. tostring(low)
+    for _, piece in ipairs(tub) do if piece.z < 300 then low = false end end
+    out[#out + 1] = "tuberhigh=" .. tostring(low)
     local o = Looks.ParseOverrides("# c\nTuberwoodAsh = /Game/Mods/X/SM_T\nBrassicaOak=/Game/A/B.B\n")
     out[#out + 1] = o.TuberwoodAsh .. " " .. o.BrassicaOak
     out[#out + 1] = Looks.PACKAGED.TuberwoodAsh
@@ -468,7 +468,7 @@ lay = L.eval(r"""function()
 end""")()
 check("layouts for the flagships", all(s in lay for s in ["TuberwoodAsh=12", "BrassicaOak=10", "SheafAsh=12", "WeepingOak=2", "BambleNone=4"]) and "!" not in lay, lay)
 check("Brassitato crowns the potato with a cabbage", "Brassitato=1:cabbage" in lay, lay)
-check("Tuberwood potatoes sit at the roots", "tuberlow=true" in lay, lay)
+check("built-in Tuberwood potatoes hang in the canopy", "tuberhigh=true" in lay, lay)
 check("meshes.txt overrides", "/Game/Mods/X/SM_T.SM_T /Game/A/B.B" in lay, lay)
 att = L.eval(r"""function()
     local Looks = require("horticulture_looks")
@@ -501,6 +501,61 @@ check("attachments scale with the host actor", att[2] == "240 1220 3.6 6", att[2
 check("a triple hybrid wears both layouts (Tuberwood 12 + Sheaf 12)", att[3] == "triple=24", att[3])
 check("primelet look: tinted cabbage and a crown of 5 gold ingots", att[4] == "primelet=6 cabbage true ingots 5 bad 0", att[4])
 check("packaged Tuberwood path", "/Game/Mods/SkillsOfAshenfallHorticulture/Art/Plants/TuberwoodAsh/SM_TuberwoodAsh_Additions_01.SM_TuberwoodAsh_Additions_01" in lay, lay)
+
+# Pipeline placement data ---------------------------------------------------
+pl = L.eval(r"""function(scripts)
+    local P = require("horticulture_placements")
+    local out = {}
+    for _, id in ipairs({ "TuberwoodAsh", "BrassicaOak", "SheafAsh", "Brassitato", "WeepingOak" }) do
+        local d, why = P.Load(scripts, id)
+        if not d then
+            out[#out + 1] = id .. "=missing " .. tostring(why)
+        else
+            local hosts, bad, pieces, nonVanilla = 0, 0, 0, 0
+            for host in pairs(d.hosts) do
+                hosts = hosts + 1
+                local shape = P.Shape(d, host)
+                if not shape or #shape.attachments == 0 then bad = bad + 1 else
+                    for _, p in ipairs(P.Pieces(shape, { havePak = false })) do
+                        pieces = pieces + 1
+                        if not p.path:find("^/Game/Art/") then nonVanilla = nonVanilla + 1 end
+                    end
+                end
+            end
+            out[#out + 1] = string.format("%s=%d hosts %d bad %d nonvanilla", id, hosts, bad, nonVanilla)
+        end
+    end
+    local d = P.Load(scripts, "TuberwoodAsh")
+    local key = P.HostKey("StaticMesh /Game/Art/Env/Landscape/Foliage/Trees/Ash_Tree/SM_FH_Ash_Tree_02.SM_FH_Ash_Tree_02")
+    local shape, name = P.Shape(d, key)
+    local all = #P.Pieces(shape, { havePak = true })
+    local free = P.Pieces(shape, { havePak = false })
+    local capped = P.Pieces(shape, { havePak = false, cap = 40 })
+    local ground = 0
+    for _, p in ipairs(capped) do if p.group == "ground_fruit" then ground = ground + 1 end end
+    local high = 0
+    for _, p in ipairs(free) do if p.group == "canopy_fruit" and p.z > 600 then high = high + 1 end end
+    out[#out + 1] = string.format("tub %s %s all %d free %d capped %d ground %d high %d", key:match("[^/]+$"), name, all, #free, #capped, ground, high)
+    out[#out + 1] = "none=" .. tostring(P.Shape(d, "/Game/Art/X/SM_Unknown") == nil) .. " " .. tostring(P.Load(scripts, "TwoBarkAsh") == nil)
+    local q = P.Quat(10, 30, -20)
+    local r = P.Rotator(q)
+    out[#out + 1] = string.format("rot %.2f %.2f %.2f", r.Pitch, r.Yaw, r.Roll)
+    local loc, rot, s = P.World({ x = 100, y = 0, z = 50, pitch = 0, yaw = 10, roll = 0, scale = 2, scaleY = 2, scaleZ = 2 },
+        { X = 1000, Y = 2000, Z = 0 }, { Pitch = 0, Yaw = 90, Roll = 0 }, { X = 1.5, Y = 1.5, Z = 1.5 })
+    out[#out + 1] = string.format("world %.0f %.0f %.0f yaw %.0f scale %.1f", loc.X, loc.Y, loc.Z, rot.Yaw, s.X)
+    local t = P.Transform(free[1])
+    out[#out + 1] = string.format("xf %.3f %.0f", math.sqrt(t.Rotation.X ^ 2 + t.Rotation.Y ^ 2 + t.Rotation.Z ^ 2 + t.Rotation.W ^ 2), t.Translation.Z)
+    return table.concat(out, "\n")
+end""")(SCRIPTS).split("\n")
+for line, want in zip(pl[:5], ["TuberwoodAsh=9 hosts 0 bad 0", "BrassicaOak=6 hosts 0 bad 0", "SheafAsh=9 hosts 0 bad 0",
+                               "Brassitato=3 hosts 0 bad 0", "WeepingOak=6 hosts 0 bad 0"]):
+    check("placement data: " + want.split("=")[0] + " covers every host with vanilla meshes only", line.startswith(want) and line.endswith(" 0 nonvanilla"), line)
+check("host picked by mesh path; stalks need the pak; cap drops fallen fruit first", pl[5].startswith("tub SM_FH_Ash_Tree_02 shape_1 all 69 free 51 capped 40 ground 0"), pl[5])
+check("Tuberwood potatoes hang in the canopy (most above 6 m)", int(pl[5].split("high ")[1]) >= 40, pl[5])
+check("unknown host or hybrid: no placement data", pl[6] == "none=true true", pl[6])
+check("rotator <-> quaternion round trip", pl[7] == "rot 10.00 30.00 -20.00", pl[7])
+check("world transform on a turned, scaled host", pl[8] == "world 1000 2150 75 yaw 100 scale 3.0", pl[8])
+check("instance transform: unit quaternion and location", pl[9].startswith("xf 1.000 "), pl[9])
 
 # The game glue, with a fake world -----------------------------------------
 GLUE = r"""

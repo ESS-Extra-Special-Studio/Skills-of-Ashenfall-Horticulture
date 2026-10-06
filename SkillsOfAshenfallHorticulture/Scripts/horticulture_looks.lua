@@ -6,6 +6,12 @@
 -- used instead of the kitbash. meshes.txt beside the Scripts folder can point
 -- a hybrid at another path ("TuberwoodAsh = /Game/Mods/.../SM_Name").
 --
+-- The five flagships wear the asset pipeline's placement data
+-- (horticulture_placements.lua): the shape is picked by the host's actual
+-- tree or crop mesh, and the vanilla pieces are added as one instanced mesh
+-- component per mesh type on a single actor (per-piece actors, a few per
+-- refresh, if instancing fails).
+--
 -- Per-hybrid placement data replaces the built-in layout: a list of
 -- { asset path, transform relative to the host's base and facing } given to
 -- Looks.SetAttachments, or read from looks\<HybridId>.txt beside the Scripts
@@ -110,9 +116,9 @@ function Looks.Layout(hybridId, scion, hostKind, size)
     local small = hostKind == "sapling" or hostKind == "plot"
     local s = small and math.max(size.height / 600, 0.25) or 1
     if hybridId == "TuberwoodAsh" then
-        local r = math.max(math.min(size.radius * 0.12, 70), 18)
-        ring(out, "potato", 9, r, -3, 2.4 * s, { jitter = 0.25, dz = 4, pitch = 20 })
-        ring(out, "potatoPlant", 3, r * 1.6, 0, 1.0 * s, { phase = 0.5 })
+        local lo, hi, r = canopy(size)
+        ring(out, "potato", 7, r, lo, 2.2 * s, { phase = 0.3, jitter = 0.2, pitch = 20 })
+        ring(out, "potato", 5, r * 0.75, (lo + hi) / 2, 2.0 * s, { phase = 1.0, jitter = 0.2, pitch = -15 })
         return out, 1.0
     elseif hybridId == "BrassicaOak" then
         local lo, hi, r = canopy(size)
@@ -261,6 +267,18 @@ local overrides = {}
 local built = {}
 local attachments = {}
 local looksDir = nil
+local scriptsDir = nil
+local Placements = require("horticulture_placements")
+
+-- Placement looks: at most CAP pieces per host (instanced, or as actors),
+-- BATCH actors added per refresh. mode "ism" or "actors" (dev toggle).
+Looks.CAP = { ism = 64, actors = 40 }
+Looks.BATCH = 24
+Looks.mode = "ism"
+-- The Horticulture pak (our stalk mesh), beside the Scripts folder. v1
+-- ships without it; requires_pak pieces are skipped.
+Looks.PAK_FILE = "SoAHorticulture_P.utoc"
+local havePak = nil
 
 -- Placement data for a hybrid: a list of { path, x, y, z, pitch, yaw, roll,
 -- scale [, scaleY, scaleZ] }, or nil to go back to the built-in layout.
@@ -287,17 +305,31 @@ function Looks.Attachments(hybridId)
     return attachments[hybridId] or nil
 end
 
+-- Mod packages load through the asset registry (LoadAsset returns nothing
+-- for /Game/Mods/...); only tried when the pak is installed.
+local function load_mod_asset(path)
+    if not havePak then return nil end
+    local obj = nil
+    pcall(function()
+        local helpers = StaticFindObject("/Script/AssetRegistry.Default__AssetRegistryHelpers")
+        local pkg, name = path:match("^([^%.]+)%.(.+)$")
+        obj = helpers:GetAsset({ PackageName = FName(pkg), AssetName = FName(name) })
+    end)
+    return U.valid(obj) and obj or nil
+end
+
+-- Only misses are cached: a loaded mesh nothing uses any more is garbage
+-- collected, and a kept reference to it crashes the game when reused.
 local function load(path)
-    if meshCache[path] ~= nil then return meshCache[path] or nil end
+    if meshCache[path] == false then return nil end
     local obj = StaticFindObject(path)
-    if not U.valid(obj) and LoadAsset then
+    if not U.valid(obj) and path:find("^/Game/Mods/") then
+        obj = load_mod_asset(path)
+    elseif not U.valid(obj) and LoadAsset then
         local ok, loaded = pcall(LoadAsset, path)
         if ok and U.valid(loaded) then obj = loaded end
     end
-    if U.valid(obj) then
-        meshCache[path] = obj
-        return obj
-    end
+    if U.valid(obj) then return obj end
     meshCache[path] = false
     return nil
 end
@@ -306,6 +338,11 @@ function Looks.Init(util, dir)
     U = util
     UEHelpers = require("UEHelpers")
     looksDir = dir .. "\\..\\looks"
+    scriptsDir = dir
+    local pak = io.open(dir .. "\\..\\" .. Looks.PAK_FILE, "rb")
+    havePak = pak ~= nil
+    if pak then pak:close() end
+    U.log("Horticulture pak " .. (havePak and "installed: hybrid stalks shown" or "not installed: hybrid looks use the game's meshes only"))
     local f = io.open(dir .. "\\..\\meshes.txt", "r")
     if f then
         overrides = Looks.ParseOverrides(f:read("*a"))
@@ -348,6 +385,14 @@ local function spawn(world, mesh, loc, rot, scale)
     local s = type(scale) == "table" and scale or { X = scale, Y = scale, Z = scale }
     pcall(function() actor:SetActorScale3D(s) end)
     return actor
+end
+
+-- Dev showcase: a vanilla mesh as a stand-in host.
+function Looks.SpawnMesh(path, loc, rot, scale)
+    local mesh = load(path)
+    local world = UEHelpers.GetWorld()
+    if not mesh or not U.valid(world) then return nil end
+    return spawn(world, mesh, loc, rot or { Pitch = 0, Yaw = 0, Roll = 0 }, scale or 1)
 end
 
 -- Host size from its bounds; defaults when they cannot be read.
@@ -447,6 +492,7 @@ function Looks.ClearAll()
 end
 
 function Looks.Built(graftId) return built[graftId] end
+function Looks.ScriptsDir() return scriptsDir end
 
 -- Builds the look for graft g on host h = { actor, kind, loc, comps }
 -- (comps: the meshes to tint and scale; plots pass the plant mesh).
@@ -473,10 +519,172 @@ local function place(world, b, base, yaw, pieces)
     end
 end
 
+-- Placement looks ------------------------------------------------------------
+
+local function mesh_key(comp)
+    local m = nil
+    pcall(function() m = comp.StaticMesh end)
+    if not U.valid(m) then pcall(function() m = comp:GetStaticMesh() end) end
+    if not U.valid(m) then return nil end
+    local name = nil
+    pcall(function() name = m:GetFullName() end)
+    return Placements.HostKey(name)
+end
+
+-- The host's mesh component whose mesh the data covers (a plot passes its
+-- plant mesh; a tree its root mesh), with the shape; else nil and the mesh
+-- paths seen.
+local function host_component(h, data)
+    local cands = {}
+    for _, c in ipairs(h.comps or {}) do cands[#cands + 1] = c end
+    local root = nil
+    pcall(function() root = h.actor.RootStaticMeshComponent end)
+    if U.valid(root) then cands[#cands + 1] = root end
+    if not h.comps or #h.comps == 0 then
+        for _, c in ipairs(mesh_components(h.actor)) do cands[#cands + 1] = c end
+    end
+    local seen = {}
+    for _, c in ipairs(cands) do
+        local key = mesh_key(c)
+        if key then
+            local shape, name = Placements.Shape(data, key)
+            if shape then return c, shape, key, name end
+            seen[#seen + 1] = key
+        end
+    end
+    return nil, nil, table.concat(seen, ", ")
+end
+
+local function comp_transform(c)
+    local loc, rot, scl = nil, { Pitch = 0, Yaw = 0, Roll = 0 }, { X = 1, Y = 1, Z = 1 }
+    pcall(function() local l = c:K2_GetComponentLocation() loc = { X = l.X, Y = l.Y, Z = l.Z } end)
+    pcall(function() local r = c:K2_GetComponentRotation() rot = { Pitch = r.Pitch, Yaw = r.Yaw, Roll = r.Roll } end)
+    pcall(function() local s = c:K2_GetComponentScale() scl = { X = s.X, Y = s.Y, Z = s.Z } end)
+    return loc, rot, scl
+end
+
+local IDENTITY = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 }, Translation = { X = 0, Y = 0, Z = 0 }, Scale3D = { X = 1, Y = 1, Z = 1 } }
+
+-- One actor at the host mesh's transform; one instanced mesh component per
+-- mesh type on it. Returns the instances added (0: instancing unavailable).
+local function build_ism(world, b, t, pieces, tints, cull)
+    local anchor = spawn(world, nil, t.loc, t.rot, t.scl)
+    if not anchor then return 0 end
+    b.actors[#b.actors + 1] = anchor
+    local cls = load("/Script/Engine.InstancedStaticMeshComponent")
+    if not cls then return 0 end
+    local byPath, order = {}, {}
+    for _, p in ipairs(pieces) do
+        if not byPath[p.path] then byPath[p.path] = {} order[#order + 1] = p.path end
+        table.insert(byPath[p.path], p)
+    end
+    local n = 0
+    for _, path in ipairs(order) do
+        local mesh = load(path)
+        if mesh then
+            local ok, ism = pcall(function() return anchor:AddComponentByClass(cls, false, IDENTITY, false) end)
+            if not ok or not U.valid(ism) then return n end
+            pcall(function() ism:SetMobility(2) end)
+            pcall(function() ism:SetStaticMesh(mesh) end)
+            pcall(function() ism:SetCollisionEnabled(0) end)
+            if cull then pcall(function() ism:SetCullDistances(0, cull) end) end
+            for _, p in ipairs(byPath[path]) do
+                pcall(function() ism:AddInstance(Placements.Transform(p), false) end)
+            end
+            local count = 0
+            pcall(function() count = ism:GetInstanceCount() end)
+            n = n + count
+            local tintName = nil
+            for _, p in ipairs(byPath[path]) do tintName = tintName or (tints and tints[p.group]) end
+            if tintName then tint({ ism }, tintName) end
+        else
+            U.log_once("mesh" .. path, "Hybrid look: mesh " .. path .. " could not be loaded")
+        end
+    end
+    return n
+end
+
+-- Per-piece actors, BATCH per call; true when the queue is done.
+local function continue_actors(b)
+    local world = UEHelpers.GetWorld()
+    if not U.valid(world) then return false end
+    local last = math.min(b.qi + Looks.BATCH - 1, #b.queue)
+    for i = b.qi, last do
+        local p = b.queue[i]
+        local mesh = load(p.path)
+        if mesh then
+            local loc, rot, scl = Placements.World(p, b.t.loc, b.t.rot, b.t.scl)
+            local a = spawn(world, mesh, loc, rot, scl)
+            if a then
+                b.actors[#b.actors + 1] = a
+                if b.cull then pcall(function() a.StaticMeshComponent:SetCullDistance(b.cull) end) end
+                local tintName = b.tints and b.tints[p.group]
+                if tintName then tint(mesh_components(a), tintName) end
+            end
+        end
+    end
+    b.qi = last + 1
+    if b.qi > #b.queue then
+        b.queue = nil
+        U.log(string.format("%s look: %d actor(s) placed", b.hybridId, #b.actors))
+        return true
+    end
+    return false
+end
+
+-- Builds a flagship's look from placement data. False when the data does
+-- not cover this host (the built-in layout is used instead).
+local function apply_placement(world, b, h, hybridId)
+    local data = scriptsDir and Placements.Load(scriptsDir, hybridId)
+    if not data then return false end
+    local comp, shape, key, name = host_component(h, data)
+    if not shape then
+        U.log_once("noshape" .. hybridId .. tostring(key), string.format("%s: no placement shape for host mesh(es) %s; built-in look used",
+            hybridId, key ~= "" and key or "(none readable)"))
+        return false
+    end
+    local loc, rot, scl = comp_transform(comp)
+    if not loc then return false end
+    local cull = data.component_defaults and data.component_defaults.cull_distance_cm
+    local tints = Placements.GROUP_TINT[hybridId]
+    local tintTables = nil
+    if tints then
+        tintTables = {}
+        for g, n in pairs(tints) do tintTables[g] = Looks.Tint(n) end
+    end
+    local t0 = os.clock()
+    local pieces = Placements.Pieces(shape, { havePak = havePak, cap = Looks.CAP.ism })
+    local short = key:match("([^/]+)$")
+    b.t = { loc = loc, rot = rot, scl = scl }
+    if Looks.mode == "ism" then
+        local n = build_ism(world, b, b.t, pieces, tintTables, cull)
+        if n > 0 then
+            b.instances = n
+            U.log(string.format("%s look: %d of %d piece(s) instanced on %s (%s) in %.1f ms",
+                hybridId, n, #shape.attachments, short, name, (os.clock() - t0) * 1000))
+            return true
+        end
+        for _, a in ipairs(b.actors) do if U.valid(a) then pcall(function() a:K2_DestroyActor() end) end end
+        b.actors = {}
+        U.log_once("noism", "Instanced meshes unavailable; hybrid looks use one actor per piece")
+        Looks.mode = "actors"
+    end
+    b.queue = Placements.Pieces(shape, { havePak = havePak, cap = Looks.CAP.actors })
+    b.qi, b.cull, b.tints = 1, cull, tintTables
+    U.log(string.format("%s look: %d of %d piece(s) as actors on %s (%s), %d per refresh",
+        hybridId, #b.queue, #shape.attachments, short, name, Looks.BATCH))
+    continue_actors(b)
+    return true
+end
+
 function Looks.Apply(g, h, mode, hybridId)
     local b = built[g.id]
     local hostName = U.full(h.actor)
-    if b and b.host == hostName and b.mode == mode and U.valid(h.actor) then return b.count end
+    if b and b.host == hostName and b.mode == mode and U.valid(h.actor) then
+        if b.queue then continue_actors(b) end
+        b.count = math.max(#b.actors, b.instances or 0)
+        return b.count
+    end
     Looks.Clear(g.id)
     local world = UEHelpers.GetWorld()
     if not U.valid(world) then return 0 end
@@ -489,6 +697,10 @@ function Looks.Apply(g, h, mode, hybridId)
     built[g.id] = b
     local pieces, hostScale = nil, 1.0
     local packaged = mode == "hybrid" and Looks.Packaged(hybridId) or nil
+    if mode == "hybrid" and not packaged and apply_placement(world, b, h, hybridId) then
+        b.count = math.max(#b.actors, b.instances or 0)
+        return b.count
+    end
     local attached = mode == "hybrid" and not packaged and Looks.Attachments(hybridId) or nil
     if packaged then
         local a = spawn(world, packaged, base, { Pitch = 0, Yaw = yaw, Roll = 0 }, 1.0)
