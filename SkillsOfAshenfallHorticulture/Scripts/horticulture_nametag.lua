@@ -10,8 +10,9 @@ local INK = { R = 0.03, G = 0.03, B = 0.035, A = 0.78 }
 local LEAF = { R = 0.72, G = 0.90, B = 0.55, A = 1.0 }
 local HIDDEN, HIT_TEST_INVISIBLE = 2, 3
 
--- From the screen centre, in viewport units; the tag's bottom edge sits here.
-Tag.offset = { X = 0, Y = -70 }
+-- From the screen centre, in viewport units: the tag's bottom-left corner,
+-- just above the game's prompt name, which starts right of the crosshair.
+Tag.offset = { X = 54, Y = -16 }
 Tag.size = 18
 
 local root, label = nil, nil
@@ -52,7 +53,7 @@ local function build()
         local slot = canvas:AddChildToCanvas(border)
         slot:SetAutoSize(true)
         slot:SetAnchors({ Minimum = { X = 0.5, Y = 0.5 }, Maximum = { X = 0.5, Y = 0.5 } })
-        slot:SetAlignment({ X = 0.5, Y = 1.0 })
+        slot:SetAlignment({ X = 0.0, Y = 1.0 })
         slot:SetPosition({ X = Tag.offset.X, Y = Tag.offset.Y })
         w:AddToViewport(30)
         w:SetVisibility(HIDDEN)
@@ -83,5 +84,12 @@ function Tag.Show(text)
 end
 
 function Tag.Text() return visible and shownText or nil end
+
+-- Moves the tag; it is rebuilt at the new place on its next showing.
+function Tag.SetOffset(x, y)
+    Tag.offset = { X = x, Y = y }
+    if valid(root) then pcall(function() root:RemoveFromParent() end) end
+    root, label, shownText, visible = nil, nil, nil, false
+end
 
 return Tag

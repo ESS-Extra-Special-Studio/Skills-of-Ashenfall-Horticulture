@@ -492,7 +492,7 @@ end
 -- Wind sway (horticulture_sway): instanced looks tilt their anchor, which
 -- sits at the host mesh's pivot, so the whole look bends about the trunk.
 local swayer = nil
-local swayCost = { ticks = 0, seconds = 0, since = nil, reported = false }
+local swayCost = { ticks = 0, seconds = 0, since = nil, reports = 0 }
 
 local function sway_apply(b, pitch, roll)
     local a = b.actors[b.anchor or 1]
@@ -510,11 +510,34 @@ function Looks.StartSway(opts)
     if opts.enabled == false then U.log("Wind sway is off (sway = false)") return end
     local Sway = require("horticulture_sway")
     local cfg = { base_deg = opts.deg or Sway.defaults.base_deg }
+    -- Wind and the player's place change slowly; looking them up is most of
+    -- an update's cost, so they are read a few times a second, as numbers.
+    local seen = { windAt = -math.huge, playerAt = -math.huge }
     swayer = Sway.new(cfg, {
         clock = os.clock,
-        wind = function() return Sway.GameWind(swayer.cfg, UEHelpers.GetWorld()) end,
-        player = function() local p = U.location(U.pawn()) return p and { X = p.X, Y = p.Y } or nil end,
-        apply = sway_apply,
+        wind = function()
+            local t = os.clock()
+            if t - seen.windAt >= 1.0 then
+                seen.dir, seen.intensity = Sway.GameWind(swayer.cfg, UEHelpers.GetWorld())
+                seen.windAt = t
+            end
+            return seen.dir, seen.intensity
+        end,
+        player = function()
+            local t = os.clock()
+            if t - seen.playerAt >= 0.5 then
+                local p = U.location(U.pawn())
+                seen.player = p and { X = p.X, Y = p.Y } or nil
+                seen.playerAt = t
+            end
+            return seen.player
+        end,
+        apply = function(b, pitch, roll)
+            local t0 = os.clock()
+            local ok = sway_apply(b, pitch, roll)
+            swayCost.applying = (swayCost.applying or 0) + (os.clock() - t0)
+            return ok
+        end,
     })
     U.every(math.floor(1000 / cfg.rate_hz + 0.5), "Hybrid sway", function()
         if swayer:count() == 0 then return end
@@ -524,13 +547,13 @@ function Looks.StartSway(opts)
         c.ticks, c.seconds = c.ticks + 1, c.seconds + (os.clock() - t0)
         c.since = c.since or t0
         if os.clock() - c.since >= 30 then
-            if not c.reported or opts.debug then
-                U.log(string.format("Wind sway: %d tree(s) tilted, %.3f ms per update, %.2f ms per second%s",
-                    n, c.seconds / c.ticks * 1000, c.seconds / (os.clock() - c.since) * 1000,
+            c.reports = (c.reports or 0) + 1
+            if c.reports <= 3 or opts.debug then
+                U.log(string.format("Wind sway: %d tree(s) tilted, %.3f ms per update (%.3f ms tilting), %.2f ms per second%s",
+                    n, c.seconds / c.ticks * 1000, (c.applying or 0) / c.ticks * 1000, c.seconds / (os.clock() - c.since) * 1000,
                     swayer.calm and " (game wind direction is 0; default direction used)" or ""))
-                c.reported = true
             end
-            c.ticks, c.seconds, c.since = 0, 0, nil
+            c.ticks, c.seconds, c.since, c.applying = 0, 0, nil, 0
         end
     end)
     U.log(string.format("Wind sway on: %.2f deg at the game's default wind, nearest %d within %d m at %d Hz",
@@ -538,6 +561,11 @@ function Looks.StartSway(opts)
 end
 
 function Looks.SwayCount() return swayer and swayer:count() or 0 end
+
+function Looks.SetSwayDegrees(d)
+    if swayer then swayer.cfg.base_deg = d end
+    return swayer ~= nil
+end
 
 function Looks.Clear(graftId)
     if swayer then swayer:remove(graftId) end

@@ -24,7 +24,7 @@ local FIELDS = {
     { key = "sway_degrees", default = "0.35", kind = "number", min = 0, max = 3,
       help = "How far hybrid trees' fruit leans in the game's normal wind, in degrees about the trunk base. 0 keeps it still." },
     { key = "name_tag", default = "true", kind = "bool",
-      help = "true shows a hybrid's name (Tuberwood Ash) in a small tag above the game's prompt when you look at it, and the Brassica Primelet's name when you face it." },
+      help = "true shows a small tag above the game's prompt with the name of the Brassica Primelet you face, or of a hybrid whose name the game's own prompt cannot show. Hybrid trees name themselves in the prompt either way." },
     { key = "debug", default = "false", kind = "bool",
       help = "true writes extra detail to UE4SS.log, such as each XP payment and crop name lookup." },
 }

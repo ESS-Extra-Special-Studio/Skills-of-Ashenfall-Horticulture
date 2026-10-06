@@ -1151,6 +1151,34 @@ end""")(os.path.join(TMP, "Scripts"))
 check("config: sway on by default (also for an old config.txt without it), 0.35 deg; sway = false turns it off",
       cf == "true 0.35 true false false 0.6", cf)
 
+# Hybrid names on the game's own prompt (WorldActor.DisplayName) -------------
+L = fresh()
+nm = L.eval(r"""function()
+    FText = function(s) return { ToString = function() return s end } end
+    local U = { valid = function(a) return a ~= nil and not a.gone end, full = function(a) return a.id end,
+        fname = function(a) return a.id end, log = function() end }
+    local N = require("horticulture_names")
+    local function tree(id) return { id = id, DisplayName = FText("Ash Tree") } end
+    local out = {}
+    local a = tree("A")
+    out[#out + 1] = string.format("set %s %s", tostring(N.Set(U, a, "Tuberwood Ash")), a.DisplayName:ToString())
+    out[#out + 1] = "has " .. tostring(N.Has(U, a, "Tuberwood Ash"))
+    local writes = 0
+    local b = setmetatable({ id = "B" }, {
+        __index = function(_, k) if k == "DisplayName" then return FText("Ash Tree") end end,
+        __newindex = function(t, k, v) if k == "DisplayName" then writes = writes + 1 else rawset(t, k, v) end end })
+    for _ = 1, 10 do N.Set(U, b, "Tuberwood Ash") end
+    out[#out + 1] = "stubborn " .. writes
+    N.Restore(U, a)
+    out[#out + 1] = "restored " .. a.DisplayName:ToString()
+    out[#out + 1] = "gone " .. tostring(N.Set(U, { gone = true }, "X"))
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("prompt name: a hybrid's tree is renamed once (Ash Tree -> Tuberwood Ash)", nm[0] == "set true Tuberwood Ash" and nm[1] == "has true", nm[:2])
+check("prompt name: a game that keeps its own name is tried 3 times, then left to the tag", nm[2] == "stubborn 3", nm[2])
+check("prompt name: the game's name comes back when the hybrid ends", nm[3] == "restored Ash Tree", nm[3])
+check("prompt name: a gone actor is left alone", nm[4] == "gone false", nm[4])
+
 # Discovery reveals wait for the game's level-up banner ----------------------
 os.remove(save) if os.path.exists(save) else None
 L = fresh()

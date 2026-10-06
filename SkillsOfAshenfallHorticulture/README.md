@@ -120,7 +120,7 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `action_key` | `G` | The splicing key, by its UE4SS key name. Alt and Shift with it take a cutting and select the next one. |
 | `primelet_chance` | `1.5` | Percent of cabbage-on-cabbage grafts that become a Brassica Primelet once they take. `0` turns it off. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
-| `name_tag` | `true` | Looking at a hybrid, a small tag above the game's prompt names it ("Tuberwood Ash" over the game's "Ash Tree"); facing the Brassica Primelet, it names the Primelet. `false` turns the tag off. |
+| `name_tag` | `true` | Hybrid trees always name themselves in the game's own prompt ("Tuberwood Ash" instead of "Ash Tree"). This small tag above the prompt names the Brassica Primelet you face, and any hybrid the prompt cannot name. `false` turns the tag off. |
 | `sway` | `true` | Fruit on hybrid trees sways with the game's wind, like the leaves (the nearest 12 within 30 m). `false` keeps it still. |
 | `sway_degrees` | `0.35` | How far that fruit leans at the game's normal wind, in degrees about the trunk base (0 to 3). |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |

@@ -19,6 +19,7 @@ local World = require("horticulture_world")
 local Looks = require("horticulture_looks")
 local Primelet = require("horticulture_primelet")
 local Tag = require("horticulture_nametag")
+local Names = require("horticulture_names")
 
 local Splicing = {}
 
@@ -306,6 +307,10 @@ local function watch_plot(g, c)
     end
 end
 
+local function hybrid_name(g)
+    return g.plants and #g.plants > 2 and Rules.PlantsName(g.plants) or Rules.HybridName(g.scion, g.host)
+end
+
 local function refresh_looks()
     if not ensure_state() or #st.grafts == 0 then return end
     local me = U.location(U.pawn())
@@ -318,6 +323,7 @@ local function refresh_looks()
         if not c then
             Looks.Clear(g.id)
         elseif c.kind == "stump" then
+            if cfg.promptNames ~= false then Names.Restore(U, c.actor) end
             local products = g.state == "hybrid" and Rules.Products(g.scion, g.host) or {}
             end_graft(g, "felled")
             if #products > 0 then
@@ -330,6 +336,9 @@ local function refresh_looks()
             if Core.GraftOn(st, as_point(c)) == g then
                 local id = Rules.HybridId(g.scion, g.host)
                 local placed = Looks.Apply(g, look_host(c), g.state == "hybrid" and "hybrid" or "pending", id)
+                if g.state == "hybrid" and c.kind == "tree" and cfg.promptNames ~= false then
+                    Names.Set(U, c.actor, hybrid_name(g))
+                end
                 U.log_once("look" .. g.id .. g.state, string.format("%s look on %s: %d piece(s)",
                     g.state == "hybrid" and Rules.HybridName(g.scion, g.host) or "Pending graft", U.fname(c.actor or c.obj), placed))
             end
@@ -876,11 +885,25 @@ function Splicing.TagText()
         if host.kind == "stump" then return nil end
         local g = Core.GraftOn(st, as_point(host))
         if not (g and g.state == "hybrid") then return nil end
-        return g.plants and #g.plants > 2 and Rules.PlantsName(g.plants) or Rules.HybridName(g.scion, g.host)
+        local name = hybrid_name(g)
+        if host.kind == "tree" and Names.Has(U, host.actor, name) then return nil end
+        return name
     end
     if World.PromptTarget() then return nil end
     local p = near_primelet()
     return p and Primelet.Name(p) or nil
+end
+
+-- Hybrid trees and shoots in this save, for the developer teleport.
+function Splicing.HybridSpots()
+    local out = {}
+    if not ensure_state() then return out end
+    for _, g in ipairs(st.grafts) do
+        if g.state == "hybrid" and g.kind ~= "plot" and g.x then
+            out[#out + 1] = { x = g.x, y = g.y, z = g.z, name = Rules.HybridName(g.scion, g.host), kind = g.kind }
+        end
+    end
+    return out
 end
 
 local function update_tag()
