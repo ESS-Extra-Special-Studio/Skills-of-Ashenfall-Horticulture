@@ -9,7 +9,10 @@
 -- scion field; they are read into the list.
 local Store = {}
 
-Store.VERSION = 2
+Store.VERSION = 3
+
+-- Hybrid trees saved before Rootstock wake with this many picks once.
+Store.GRANDFATHER_VIGOUR = 4
 
 function Store.New()
     return {
@@ -20,6 +23,7 @@ function Store.New()
         cuttings = {},
         grafts = {},
         sources = {},
+        primeSources = {},
         primelets = {},
     }
 end
@@ -42,8 +46,10 @@ local function num(s)
 end
 
 local V1_FIELDS = { "id", "kind", "host", "scion", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus" }
-local GRAFT_FIELDS = { "id", "kind", "plants", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus", "world" }
-local NUMERIC = { made = true, lastPick = true, x = true, y = true, z = true, tier = true, bonus = true }
+-- Fields after "world" came with Rootstock (version 3); older rows lack them.
+local GRAFT_FIELDS = { "id", "kind", "plants", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus", "world",
+    "quality", "vigour", "fed", "wet" }
+local NUMERIC = { made = true, lastPick = true, x = true, y = true, z = true, tier = true, bonus = true, quality = true, vigour = true }
 -- Fields after "carried" came with the Primelet voice; older rows lack them.
 local PRIMELET_FIELDS = { "id", "stage", "growth", "tended", "born", "world", "x", "y", "z", "yaw", "carried",
     "personality", "name", "potted", "talked", "ign", "seen", "said" }
@@ -79,7 +85,7 @@ function Store.Serialize(st)
     if st.pmflag1 then lines[#lines + 1] = "pmflag1=1" end
     if st.lastSeen then lines[#lines + 1] = "lastseen=" .. string.format("%.0f", st.lastSeen) end
     for _, c in ipairs(st.cuttings) do
-        lines[#lines + 1] = "cut=" .. clean(c.species) .. "|" .. c.taken .. (c.primelet and ("|" .. clean(c.primelet)) or "")
+        lines[#lines + 1] = "cut=" .. clean(c.species) .. "|" .. c.taken .. "|" .. clean(c.primelet or "") .. "|" .. (c.quality or 1)
     end
     for _, g in ipairs(st.grafts) do
         lines[#lines + 1] = "graft=" .. row(g, GRAFT_FIELDS)
@@ -93,6 +99,10 @@ function Store.Serialize(st)
     for _, k in ipairs(keys) do
         if st.sources[k] == st.dawn then lines[#lines + 1] = "src=" .. clean(k) .. "|" .. st.sources[k] end
     end
+    keys = {}
+    for k in pairs(st.primeSources or {}) do keys[#keys + 1] = k end
+    table.sort(keys)
+    for _, k in ipairs(keys) do lines[#lines + 1] = "prime=" .. clean(k) .. "|" .. st.primeSources[k] end
     return table.concat(lines, "\n") .. "\n"
 end
 
@@ -130,7 +140,8 @@ function Store.Parse(text)
         elseif k == "cut" then
             local p = split(v)
             if p[1] ~= "" then
-                st.cuttings[#st.cuttings + 1] = { species = p[1], taken = num(p[2]) or 0, primelet = (p[3] ~= "" and p[3]) or nil }
+                st.cuttings[#st.cuttings + 1] = { species = p[1], taken = num(p[2]) or 0, primelet = (p[3] and p[3] ~= "" and p[3]) or nil,
+                    quality = num(p[4]) or 1 }
             end
         elseif k == "graft" then
             local g
@@ -141,6 +152,9 @@ function Store.Parse(text)
                 g = read_row(v, GRAFT_FIELDS, NUMERIC)
                 if g.plants then Store.SetPlants(g, split(g.plants, ">")) end
             end
+            g.fed, g.wet = g.fed == "1", g.wet == "1"
+            local cropOnTree = g.kind ~= "plot" and g.scion and g.scion:find("^FPD_") ~= nil
+            if g.state == "hybrid" and cropOnTree and g.vigour == nil then g.vigour = Store.GRANDFATHER_VIGOUR end
             if g.id and g.plants and #g.plants >= 2 then st.grafts[#st.grafts + 1] = g end
         elseif k == "primelet" then
             local p = read_row(v, PRIMELET_FIELDS, PRIMELET_NUMERIC)
@@ -155,6 +169,9 @@ function Store.Parse(text)
         elseif k == "src" then
             local p = split(v)
             if p[1] ~= "" then st.sources[p[1]] = num(p[2]) end
+        elseif k == "prime" then
+            local p = split(v)
+            if p[1] ~= "" then st.primeSources[p[1]] = num(p[2]) end
         end
     end
     if st.selected > #st.cuttings then st.selected = math.max(1, #st.cuttings) end

@@ -157,6 +157,7 @@ local function plot_info(slot)
         kind = "plot", obj = slot, actor = owner, loc = loc, species = species, stage = st.stage,
         alive = st.stage == 1 or st.stage == 2, tier = tier, key = plot_key(slot, loc),
         planted = true, plant = U.valid(plant) and plant or nil,
+        water = (tonumber(st.water) or 0) >= 1 and 1 or 0, fert = (tonumber(st.fert) or 0) >= 1 and 1 or 0, growth = st.growth,
     }
 end
 
@@ -545,6 +546,73 @@ function World.Give(path, count)
     end
     U.log_once("give" .. path, "Could not give " .. path)
     return false
+end
+
+-- A crop's vanilla BaseYield and HarvestXpFactor, read from its loaded
+-- FarmPlantDataAsset ({ yield, factor }); nil fields fall back to Rules.
+local cropValues = {}
+function World.CropValues(species)
+    if cropValues[species] then return cropValues[species] end
+    local data = StaticFindObject("/Game/Gameplay/Farming/Plants/" .. species .. "." .. species)
+    if not U.valid(data) then return nil end
+    local v = { yield = tonumber(prop(data, "BaseYield")), factor = tonumber(prop(data, "HarvestXpFactor")) }
+    U.log(string.format("%s vanilla BaseYield %s, HarvestXpFactor %s", species, tostring(v.yield), tostring(v.factor)))
+    cropValues[species] = v
+    return v
+end
+
+-- Vanilla Farming XP through the game's own
+-- SkillComponent:AddXpFromEvent(XPEventRowHandle, ContextString, Multiplier,
+-- bIgnoreModifier) with DT_XPEvents_Farming's Harvesting row (8 XP), so the
+-- game's level-up runs as for any harvest. Returns the XP the skill shows
+-- afterwards minus before (nil when it could not be read or called).
+local FARMING_ID = "PyUi-0LU_riFY46AnnFiWg"
+local XP_TABLE = "/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Farming.DT_XPEvents_Farming"
+local function farming_xp(sc)
+    local xp = nil
+    pcall(function()
+        local arr = sc.Skills
+        for i = 1, arr:GetArrayNum() do
+            local e = arr[i]
+            if e.SkillData.PersistenceID:ToString() == FARMING_ID then xp = e.CurrentXp break end
+        end
+    end)
+    return tonumber(xp)
+end
+
+function World.AddFarmingXp(amount, context)
+    if not amount or amount <= 0 then return 0 end
+    local sc = prop(U.pc(), "SkillComponent")
+    if not U.valid(sc) then return nil end
+    local dt = StaticFindObject(XP_TABLE)
+    if not U.valid(dt) and LoadAsset then
+        local ok, loaded = pcall(LoadAsset, XP_TABLE)
+        if ok then dt = loaded end
+    end
+    if not U.valid(dt) then
+        U.log_once("noxptable", "DT_XPEvents_Farming not found; no Farming XP for picks")
+        return nil
+    end
+    local before = farming_xp(sc)
+    local ok, err = pcall(function()
+        sc:AddXpFromEvent({ DataTable = dt, RowName = FName("Harvesting") }, context or "Horticulture", amount / Rules.HARVEST_XP_BASE, true)
+    end)
+    if not ok then
+        U.log_once("addxp", "AddXpFromEvent failed: " .. tostring(err))
+        return nil
+    end
+    local after = farming_xp(sc)
+    U.log(string.format("Farming XP via AddXpFromEvent: asked %d, %s -> %s", amount, tostring(before), tostring(after)))
+    if before and after then return after - before end
+    return nil
+end
+
+-- True while the player is in plain gameplay: no build menu, inventory or
+-- other menu (those show the mouse cursor).
+function World.InGameplay()
+    local pc = U.pc()
+    if not pc then return false end
+    return prop(pc, "bShowMouseCursor") ~= true
 end
 
 -- The actor the game's interaction prompt is on, or nil.

@@ -66,14 +66,28 @@ function Core.CanTakeCutting(st, src)
     return true
 end
 
+-- A plot gives one prime cutting per crop cycle (ROOTSTOCK.primeCooldown
+-- dawns); otherwise the cutting is common.
 function Core.TakeCutting(st, src)
     local ok, why = Core.CanTakeCutting(st, src)
     if not ok then return nil, why end
-    local c = { species = src.species, taken = st.dawn }
+    local quality = Rules.CuttingQuality(src)
+    st.primeSources = st.primeSources or {}
+    if quality >= 2 and src.key then
+        local last = st.primeSources[src.key]
+        if last and st.dawn - last < Rules.ROOTSTOCK.primeCooldown then quality = 1 else st.primeSources[src.key] = st.dawn end
+    end
+    local c = { species = src.species, taken = st.dawn, quality = quality }
     st.cuttings[#st.cuttings + 1] = c
     st.selected = #st.cuttings
     if src.key then st.sources[src.key] = st.dawn end
     return c
+end
+
+-- A dormant hybrid tree that this cutting can wake: the same crop, prime.
+local function refreshable(existing, c)
+    return existing.state == "hybrid" and Rules.UsesVigour(existing) and (existing.vigour or 0) <= 0
+        and c and not c.primelet and c.species == existing.scion
 end
 
 -- host: { species, kind, key, planted, stage, tier, x, y, z, bonus, world }.
@@ -84,28 +98,46 @@ function Core.CanGraft(st, host, level, c)
     local existing = Core.GraftOn(st, host)
     if existing then
         if existing.state == "pending" then return false, "Already grafted. Come back after dawn" end
+        if refreshable(existing, c) then
+            if (c.quality or 1) >= 2 then return true, "refresh" end
+            return false, Rules.DormantText(existing.scion) .. ". " .. Rules.PRIME_HOWTO
+        end
         local why = "This is already a " .. Rules.PlantsName(existing.plants)
         if c and not c.primelet and Rules.MaxPlants(level) > #existing.plants then
-            local ok, refuse = Rules.CanAddTo(existing.plants, c.species, host, level)
+            local ok, refuse = Rules.CanAddTo(existing.plants, c.species, host, level, c.quality)
             if not ok then why = refuse end
         end
         return false, why
     end
     if not c then return false, "Your satchel is empty. Take a cutting first" end
     if c.primelet then return false, "Set the Primelet down first (G on open ground)" end
-    return Rules.CanGraft(c.species, host, level)
+    return Rules.CanGraft(c.species, host, level, c.quality)
 end
 
-function Core.Graft(st, host, level)
-    local ok, why = Core.CanGraft(st, host, level)
-    if not ok then return nil, why end
+local function use_selected(st)
     local c = Core.Selected(st)
     table.remove(st.cuttings, st.selected)
     if st.selected > #st.cuttings then st.selected = math.max(1, #st.cuttings) end
+    return c
+end
+
+-- Returns the graft and "refresh" when a prime cutting woke a dormant tree
+-- (no dawn roll), or nil and the reason.
+function Core.Graft(st, host, level)
+    local ok, why = Core.CanGraft(st, host, level)
+    if not ok then return nil, why end
+    if why == "refresh" then
+        local g = Core.GraftOn(st, host)
+        use_selected(st)
+        g.vigour = Rules.ROOTSTOCK.vigourPicks
+        g.quality = 2
+        return g, "refresh"
+    end
+    local c = use_selected(st)
     local g = Store.SetPlants({
         id = "g" .. st.nextId, kind = host.kind,
         state = "pending", made = st.dawn, x = host.x, y = host.y, z = host.z,
-        key = host.key, tier = host.tier, bonus = host.bonus, world = host.world,
+        key = host.key, tier = host.tier, bonus = host.bonus, world = host.world, quality = c.quality or 1,
     }, { host.species, c.species })
     st.nextId = st.nextId + 1
     st.grafts[#st.grafts + 1] = g
@@ -152,6 +184,7 @@ function Core.Dawn(st, level, rng, alive, opts)
                         outcomes[#outcomes + 1] = { graft = g, result = "primelet", chance = chance, primelet = p }
                     else
                         g.state = "hybrid"
+                        if Rules.UsesVigour(g) then g.vigour = Rules.ROOTSTOCK.vigourPicks end
                         keep[#keep + 1] = g
                         outcomes[#outcomes + 1] = { graft = g, result = "takes", chance = chance }
                     end
@@ -176,26 +209,48 @@ function Core.Dawn(st, level, rng, alive, opts)
     return outcomes, wilted, Primelet.Dawn(st)
 end
 
--- Tree and sapling hybrids give once per in-game day.
+-- Tree and sapling hybrids give once per in-game day; a crop scion on a tree
+-- also uses a pick of vigour, and goes dormant at none.
 function Core.CanPick(st, g)
     if not g or g.state ~= "hybrid" then return false, "Nothing to pick yet" end
     if g.kind == "plot" then return false, "Harvest the crop as usual; the graft adds to it" end
+    if Rules.UsesVigour(g) and (g.vigour or 0) <= 0 then return false, Rules.DormantText(g.scion), "dormant" end
     if g.lastPick == st.dawn then return false, "Already picked today. More after dawn" end
     return true
 end
 
-function Core.Pick(st, g)
+-- opts: Rules.Products tree options (farming, live).
+function Core.Pick(st, g, opts)
     local ok, why = Core.CanPick(st, g)
     if not ok then return nil, why end
     g.lastPick = st.dawn
-    return Rules.Products(g.scion, g.host)
+    if Rules.UsesVigour(g) then g.vigour = (g.vigour or 0) - 1 end
+    local o = { tree = true }
+    for k, v in pairs(opts or {}) do o[k] = v end
+    return Rules.Products(g.scion, g.host, o)
 end
 
 -- A crop host was harvested: its graft ends. Products only for a hybrid.
-function Core.Harvested(st, g)
+-- opts: Rules.Products plot options; the graft's own fed, wet and quality
+-- fill compost, water and prime.
+function Core.Harvested(st, g, opts)
     Core.Remove(st, g)
     if g.state ~= "hybrid" then return {} end
-    return Rules.Products(g.scion, g.host)
+    local o = { plot = true, compost = g.fed == true, water = g.wet == true, prime = (g.quality or 1) >= 2, tier = g.tier }
+    for k, v in pairs(opts or {}) do o[k] = v end
+    return Rules.Products(g.scion, g.host, o)
+end
+
+-- A hybrid tree was felled: its graft ends. At most one pick's worth falls
+-- with the logs, and only when a pick was left (not picked today, vigour
+-- remaining).
+function Core.Felled(st, g, opts)
+    Core.Remove(st, g)
+    if g.state ~= "hybrid" or g.lastPick == st.dawn then return {} end
+    if Rules.UsesVigour(g) and (g.vigour or 0) <= 0 then return {} end
+    local o = { tree = true }
+    for k, v in pairs(opts or {}) do o[k] = v end
+    return Rules.Products(g.scion, g.host, o)
 end
 
 return Core

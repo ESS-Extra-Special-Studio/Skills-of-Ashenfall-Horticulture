@@ -46,6 +46,11 @@ end
 failures = 0
 
 
+def drop(path):
+    if os.path.exists(path):
+        os.remove(path)
+
+
 def check(name, ok, detail=""):
     global failures
     failures += 0 if ok else 1
@@ -62,7 +67,7 @@ def fresh():
 L = fresh()
 R = L.eval('(require("horticulture_splice_rules"))')
 cancut = L.eval("function(t) local ok, why = require('horticulture_splice_rules').CanCut(t) return tostring(ok) .. '|' .. tostring(why) end")
-cangraft = L.eval("function(s, h, lv) local ok, why = require('horticulture_splice_rules').CanGraft(s, h, lv) return tostring(ok) .. '|' .. tostring(why) end")
+cangraft = L.eval("function(s, h, lv, q) local ok, why = require('horticulture_splice_rules').CanGraft(s, h, lv, q) return tostring(ok) .. '|' .. tostring(why) end")
 T = L.table_from
 
 
@@ -94,7 +99,9 @@ check("willow cutting at 20 with an iron axe", r.startswith("true"), r)
 r = cangraft("Oak", t(species="FPD_Cabbage", kind="plot", stage=1), 25)
 check("tree cutting never onto a crop", r.startswith("false") and "cannot take on a crop" in r, r)
 r = cangraft("FPD_Potato", t(species="Ash", kind="tree", planted=True), 5)
-check("potato onto a planted ash", r.startswith("true"), r)
+check("a common potato cutting is refused by a tree", r.startswith("false") and "prime" in r, r)
+r = cangraft("FPD_Potato", t(species="Ash", kind="tree", planted=True), 5, 2)
+check("a prime potato cutting onto a planted ash", r.startswith("true"), r)
 r = cangraft("FPD_Potato", t(species="Ash", kind="tree", planted=False), 5)
 check("wild tree refused", r.startswith("false") and "planted" in r, r)
 r = cangraft("FPD_Cabbage", t(species="FPD_Potato", kind="plot", stage=1), 5)
@@ -116,7 +123,7 @@ plants = L.eval(r"""function()
     out[#out + 1] = R.PlantsName({ "Ash", "FPD_Potato", "FPD_Cabbage" })
     local tree = { kind = "tree", planted = true }
     local plot = { kind = "plot", stage = 1 }
-    local function can(p, s, h, lv) local ok, why = R.CanAddTo(p, s, h, lv) return tostring(ok) .. "|" .. tostring(why) end
+    local function can(p, s, h, lv) local ok, why = R.CanAddTo(p, s, h, lv, 2) return tostring(ok) .. "|" .. tostring(why) end
     out[#out + 1] = can({ "Ash", "FPD_Potato" }, "FPD_Cabbage", tree, 25)
     R.MAX_LEVEL = 99
     out[#out + 1] = tostring(R.MaxPlants(49)) .. tostring(R.MaxPlants(50))
@@ -135,7 +142,7 @@ check("triple: cabbage onto Tuberwood Ash", plants[6].startswith("true"), plants
 check("triple: a tree cutting still never goes onto a crop", "cannot take on a crop" in plants[7], plants[7])
 check("triple: no plant twice", "already carries" in plants[8], plants[8])
 check("triple: three at most", plants[9].startswith("false"), plants[9])
-r = cangraft("FPD_Cabbage", t(species="Oak", kind="sapling", planted=True), 7)
+r = cangraft("FPD_Cabbage", t(species="Oak", kind="sapling", planted=True), 7, 2)
 check("oak host needs 8", r.startswith("false") and "8" in r, r)
 r = cangraft("Ash", t(species="Oak", kind="tree", planted=True), 8)
 check("ash onto oak (tree on tree)", r.startswith("true"), r)
@@ -196,11 +203,11 @@ mig = L.eval(r"""function(path, out)
     Store.Save(out, st)
     local text = io.open(out):read("*a")
     local b = Store.Load(out)
-    return a .. "\n" .. (text:find("version=2", 1, true) and "v2" or "v?") .. " " .. table.concat(b.grafts[1].plants, ">")
+    return a .. "\n" .. (text:find("version=3", 1, true) and "v3" or "v?") .. " " .. table.concat(b.grafts[1].plants, ">")
         .. " " .. b.grafts[2].host .. " " .. b.grafts[2].scion
 end""")(os.path.join(TMP, "v1.txt"), os.path.join(TMP, "v2.txt")).split("\n")
 check("version 1 save migrates to plant lists", mig[0] == "2 Ash>FPD_Potato Ash FPD_Potato 3 FPD_Potato>FPD_Cabbage plot:7 1", mig[0])
-check("migrated save is written as version 2 and reads back", mig[1] == "v2 Ash>FPD_Potato FPD_Potato FPD_Cabbage", mig[1])
+check("migrated save is written as version 3 and reads back", mig[1] == "v3 Ash>FPD_Potato FPD_Potato FPD_Cabbage", mig[1])
 
 trip = L.eval(r"""function(path)
     local Store = require("horticulture_splice_store")
@@ -226,7 +233,7 @@ flow = L.eval(r"""function()
     local st = require("horticulture_splice_store").New()
     local out = {}
     local function say(...) out[#out + 1] = table.concat({ ... }, " ") end
-    local potato = { species = "FPD_Potato", kind = "crop", key = "plot:1", level = 5, alive = true }
+    local potato = { species = "FPD_Potato", kind = "crop", key = "plot:1", level = 5, alive = true, from = "plot", growth = 1, water = 1, fert = 1, tier = 1 }
     local c, why = Core.TakeCutting(st, potato)
     say("cut", c and c.species or why)
     c, why = Core.TakeCutting(st, potato)
@@ -260,7 +267,7 @@ check("graft potato onto planted ash", lines[2] == "graft FPD_Potato>Ash pending
 check("no second graft on a pending host", "after dawn" in lines[3], lines[3])
 check("first graft always takes at dawn", lines[4] == "dawn 1 takes 100", lines[4])
 check("sapling grown into a tree keeps the graft", lines[5] == "same host hybrid", lines[5])
-check("pick 3 potatoes", lines[6] == "pick 1 3 Potato", lines[6])
+check("pick 5 potatoes (a plot harvest, at most half a tended one)", lines[6] == "pick 1 5 Potato", lines[6])
 check("once a day", "Already picked today" in lines[7], lines[7])
 check("pick again after dawn", lines[8] == "next day yes", lines[8])
 
@@ -279,7 +286,7 @@ misc = L.eval(r"""function()
     out[#out + 1] = "after2 " .. #st.cuttings
     -- rejection: second graft can fail
     st.firstTaken = true
-    Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "z", level = 1, alive = true })
+    Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "z", level = 1, alive = true, from = "plot", growth = 1, water = 1, fert = 1, tier = 1 })
     Core.Graft(st, { species = "Ash", kind = "tree", planted = true, x = 0, y = 0 }, 1)
     local outs = Core.Dawn(st, 1, function() return 100 end)
     out[#out + 1] = outs[1].result .. " " .. outs[1].chance .. " grafts " .. #st.grafts
@@ -688,6 +695,8 @@ W.PromptHost = function() return promptHost end
 W.PromptTarget = function() return promptTarget end
 package.loaded["horticulture_nametag"] = { Show = function(t) tagShown[#tagShown + 1] = tostring(t) end }
 W.Give = function(item, n) given[#given + 1] = item:match("([^/]+)$") .. "x" .. n return true end
+W.AddFarmingXp = function(n) xp[#xp + 1] = "Farming=" .. n return n end
+W.CropValues = function() return nil end
 local Looks = require("horticulture_looks")
 Looks.Init = function() end
 Looks.Apply = function(g, h, mode, id) applied[#applied + 1] = g.id .. ":" .. mode .. ":" .. id return 3 end
@@ -718,7 +727,9 @@ function tick() for _, fn in ipairs(loops) do fn() end end
 function press(k) binds[k]() tick() end
 function take(list) local s = table.concat(_G[list], " ; ") _G[list] = {} return s end
 function plot(species, stage, x) return { kind = "plot", species = species, stage = stage, alive = stage == 1 or stage == 2, tier = 1,
-    key = "plot:" .. x, planted = true, loc = { X = x, Y = 0, Z = 0 }, obj = {}, actor = {} } end
+    key = "plot:" .. x, planted = true, loc = { X = x, Y = 0, Z = 0 }, obj = {}, actor = {}, water = 0, fert = 0, growth = 1 } end
+-- A watered, composted plot: its crop gives a prime cutting.
+function tended(p) p.water, p.fert = 1, 1 return p end
 function tree(species, planted, x, kind) return { kind = kind or "tree", species = species, planted = planted, alive = true,
     loc = { X = x, Y = 100, Z = 0 }, obj = {}, actor = {} } end
 """
@@ -726,7 +737,7 @@ function tree(species, planted, x, kind) return { kind = kind or "tree", species
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 g = L.globals()
-potato = g.plot("FPD_Potato", 1, 50)
+potato = g.tended(g.plot("FPD_Potato", 1, 50))
 ash = g.tree("Ash", True, 300, "sapling")
 g.nearby = L.table_from([potato, ash])
 bound = sorted(str(k) for k in g.binds.keys())
@@ -737,7 +748,7 @@ g.aimed = potato
 g.press("G")
 check("G on a potato plot takes a cutting", "Cutting taken=8" in g.take("xp"), "")
 c = g.take("cards")
-check("CUTTING TAKEN card (ESL card, own kicker)", "CUTTING TAKEN|Potato|Satchel 1/6" in c, c)
+check("a tended plot gives a PRIME CUTTING card (ESL card, own kicker)", "PRIME CUTTING|Potato|Satchel 1/6" in c and "a tree will take it" in c, c)
 g.aimed = ash
 g.press("G")
 x = g.take("xp")
@@ -765,9 +776,12 @@ g.tick()
 check("hybrid look applied", "g1:hybrid:TuberwoodAsh" in g.take("applied"))
 g.aimed = ash
 g.press("G")
-check("G on Tuberwood Ash picks 3 potatoes", "ITEM_Resources_Potatox3" in g.take("given"))
+check("G on Tuberwood Ash picks 5 potatoes (Farming 0)", "ITEM_Resources_Potatox5" in g.take("given"))
 x = g.take("xp")
-check("picking pays 25", "Hybrid picked=25" in x, x)
+check("picking pays 25 Horticulture XP", "Hybrid picked=25" in x, x)
+check("and capped vanilla Farming XP (25% of a plot harvest of 5, at most 8)", "Farming=8" in x, x)
+c = g.take("cards")
+check("pick card counts the picks left on the scion", "PICKED|Tuberwood Ash|" in c and "3 picks left" in c, c)
 g.press("G")
 c = g.take("cards")
 check("second pick the same day refused", "Already picked today" in c, c)
@@ -830,7 +844,7 @@ check("restart keeps grafts and satchel", st is not None and len(st.grafts) == 1
 L = fresh()
 L.execute(GLUE, SCRIPTS, os.path.join(TMP))
 g = L.globals()
-os.remove(save)
+drop(save)
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 g = L.globals()
@@ -859,7 +873,7 @@ c = g.take("cards")
 check("HYBRID HARVEST card", "HYBRID HARVEST|Brassitato|" in c, c)
 
 # A wild potato is a source, never a host.
-os.remove(save)
+drop(save)
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 g = L.globals()
@@ -868,17 +882,19 @@ ash = g.tree("Ash", True, 300, "sapling")
 g.nearby = L.table_from([wild, ash])
 g.aimed = wild
 g.press("G")
-check("G on a wild potato takes a cutting", "Cutting taken=8" in g.take("xp"))
-g.take("cards")
-g.press("G")
 c = g.take("cards")
-check("a wild potato is not a host", "NO CUTTING|" in c and "GRAFT MADE" not in c, c)
+check("no cuttings from wild crops (Rootstock)", "NO CUTTING|Wild plants won't take a graft" in c and g.take("xp") == "", c)
+check("a wild potato is not a host either", "GRAFT MADE" not in c, c)
+g.S.State().cuttings[1] = L.table_from({"species": "FPD_Potato", "taken": 0, "quality": 1})
+g.S.State().selected = 1
 g.aimed = ash
 g.press("G")
-check("wild potato cutting grafts onto a planted ash", "Graft made=20" in g.take("xp"))
+c = g.take("cards")
+check("a common potato cutting is refused by a planted ash, saying where prime ones come from",
+      "CANNOT GRAFT|Trees only take a prime cutting" in c and g.take("xp") == "", c)
 
 # Brassica Primelet in the world: graft, forced reveal, tend, carry, set down.
-os.remove(save)
+drop(save)
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 g = L.globals()
@@ -931,7 +947,7 @@ pl = L2.eval('(function() local st = require("horticulture_splicing").State() re
 check("restart keeps the Primelet where it was set down", pl == "1 false 120", pl)
 
 # The dev force key seeds a graft ahead of a player with no cabbage plots.
-os.remove(save)
+drop(save)
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 g = L.globals()
@@ -975,7 +991,7 @@ function run(id, kind) act(id).run({ kind = kind }) tick() end
 function choose(id, value) act(id).run({ kind = "tree" }, { value = value }) tick() end
 function ids() local out = {} for _, a in ipairs(def_.actions) do out[#out + 1] = a.id end return table.concat(out, ",") end
 """
-os.remove(save) if os.path.exists(save) else None
+drop(save) if os.path.exists(save) else None
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 L.execute(WHEEL, TMP)
@@ -985,7 +1001,7 @@ check("wheel: without ActionWheel, Start returns false and the keys stay as they
 check("wheel: with ActionWheel, Horticulture registers its slices",
       g.withWheel is True and g.ids() == "pick,graft,take_cutting,inspect,tend,pick_up,set_down,next_cutting,status", g.ids())
 
-potato = g.plot("FPD_Potato", 1, 50)
+potato = g.tended(g.plot("FPD_Potato", 1, 50))
 ash = g.tree("Ash", True, 300, "sapling")
 oak = g.tree("Oak", True, 600)
 g.nearby = L.table_from([potato, ash, oak])
@@ -1019,11 +1035,11 @@ for _ in range(4):
     g.tick()
 g.take("cards"); g.take("xp"); g.take("awards")
 v = g.view("pick")
-check("wheel: Pick names the hybrid", v == "on Pick Tuberwood Ash", v)
+check("wheel: Pick names the hybrid and the picks left on the scion", v == "on Pick Tuberwood Ash (4 left)", v)
 g.run("pick", "sapling")
-check("wheel: Pick gives the same produce as G", "ITEM_Resources_Potatox3" in g.take("given"))
+check("wheel: Pick gives the same produce as G", "ITEM_Resources_Potatox5" in g.take("given"))
 v = g.view("pick")
-check("wheel: picked today, greyed with the reason", v == "off Pick Tuberwood Ash | Already picked today. More after dawn", v)
+check("wheel: picked today, greyed with the reason", v == "off Pick Tuberwood Ash (3 left) | Already picked today. More after dawn", v)
 
 # Primelet slices, on the self wheel as well.
 L.execute('local P = require("horticulture_primelet") local st = S.State() P.New(st, 60, 0, 0, "w") S.Save()')
@@ -1216,12 +1232,12 @@ nm = L.eval(r"""function()
     return table.concat(out, "\n")
 end""")().split("\n")
 check("prompt name: a hybrid's tree is renamed once (Ash Tree -> Tuberwood Ash)", nm[0] == "set true Tuberwood Ash" and nm[1] == "has true", nm[:2])
-check("prompt name: a game that keeps its own name is tried 3 times, then left to the tag", nm[2] == "stubborn 3", nm[2])
+check("prompt name: a game that keeps its own name is tried 5 times, then left to the tag", nm[2] == "stubborn 5", nm[2])
 check("prompt name: the game's name comes back when the hybrid ends", nm[3] == "restored Ash Tree", nm[3])
 check("prompt name: a gone actor is left alone", nm[4] == "gone false", nm[4])
 
 # Discovery reveals wait for the game's level-up banner ----------------------
-os.remove(save) if os.path.exists(save) else None
+drop(save) if os.path.exists(save) else None
 L = fresh()
 L.execute(GLUE, SCRIPTS, TMP)
 L.execute(r"""
@@ -1236,7 +1252,7 @@ ESL.AddXp = function(_, n, label) xp[#xp + 1] = label .. "=" .. n if levelUp the
 function step(sec) clock = clock + sec tick() end
 """)
 g = L.globals()
-potato = g.plot("FPD_Potato", 1, 50)
+potato = g.tended(g.plot("FPD_Potato", 1, 50))
 ash = g.tree("Ash", True, 300, "sapling")
 g.nearby = L.table_from([potato, ash])
 g.aimed = potato
@@ -1282,7 +1298,7 @@ check("reveal hold: never held longer than 25 s (a banner that never goes)", Tru
 L = fresh()
 T = L.table_from
 cancut = L.eval("function(t) local ok, why = require('horticulture_splice_rules').CanCut(t) return tostring(ok) .. '|' .. tostring(why) end")
-cangraft = L.eval("function(s, h, lv) local ok, why = require('horticulture_splice_rules').CanGraft(s, h, lv) return tostring(ok) .. '|' .. tostring(why) end")
+cangraft = L.eval("function(s, h, lv, q) local ok, why = require('horticulture_splice_rules').CanGraft(s, h, lv, q) return tostring(ok) .. '|' .. tostring(why) end")
 r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1, "skills": T({"Farming": 19})}))
 check("gate: an ash cutting needs Tree Farming (Farming 20)", r == "false|Needs Farming 20", r)
 r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1, "skills": T({"Farming": 20})}))
@@ -1297,13 +1313,13 @@ r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1, "skil
 check("gate: an unreadable Farming level never blocks", r.startswith("true"), r)
 r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1}))
 check("gate: no skills given never blocks", r.startswith("true"), r)
-r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 19})}), 1)
+r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 19})}), 1, 2)
 check("gate: grafting onto an ash host needs Farming 20", r == "false|Needs Farming 20 for ash", r)
 r = cangraft("Oak", T({"species": "Ash", "kind": "tree", "planted": True, "skills": T({"Farming": 19})}), 8)
 check("gate: a tree cutting as the donor needs Farming 20", r == "false|Needs Farming 20 for oak", r)
 r = cangraft("FPD_Cabbage", T({"species": "FPD_Potato", "kind": "plot", "planted": True, "stage": 1, "skills": T({"Farming": 0})}), 5)
 check("gate: crop donor and crop host both checked", r.startswith("false|Needs Farming 1"), r)
-r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 20})}), 1)
+r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 20})}), 1, 2)
 check("gate: Farming 20 grafts potato onto ash", r.startswith("true"), r)
 
 # Derived gates: crop -> lowest plot tier in its FPD Farming.Tiers tags (pak
@@ -1332,7 +1348,7 @@ r = cancut(T({"species": "FPD_Wheat", "kind": "crop", "level": 10, "alive": True
 check("gate: wheat grows in the ash plot, Farming 1", r.startswith("true"), r)
 r = cangraft("Oak", T({"species": "Ash", "kind": "tree", "planted": True, "skills": T({"Farming": 30, "Woodcutting": 9})}), 8)
 check("gate: an oak donor needs Woodcutting 10", r == "false|Needs Woodcutting 10 for oak", r)
-r = cangraft("FPD_Potato", T({"species": "Willow", "kind": "tree", "planted": True, "skills": T({"Farming": 30, "Woodcutting": 15})}), 20)
+r = cangraft("FPD_Potato", T({"species": "Willow", "kind": "tree", "planted": True, "skills": T({"Farming": 30, "Woodcutting": 15})}), 20, 2)
 check("gate: a willow host needs Woodcutting 20", r == "false|Needs Woodcutting 20 for willow", r)
 r = cangraft("FPD_Tomato", T({"species": "FPD_Potato", "kind": "plot", "planted": True, "stage": 1, "skills": T({"Farming": 9})}), 18)
 check("gate: a tomato donor needs Farming 10", r == "false|Needs Farming 10 for tomato", r)
@@ -1379,7 +1395,7 @@ gen = L.eval(r"""function(scripts)
                 end
             end
             if pieces == 0 then empty[#empty + 1] = e.key end
-            local ok = Rules.CanGraft(scion, { species = host, kind = Rules.IsTree(host) and "tree" or "plot", planted = true, stage = 1 }, 25)
+            local ok = Rules.CanGraft(scion, { species = host, kind = Rules.IsTree(host) and "tree" or "plot", planted = true, stage = 1 }, 25, 2)
             if not ok then illegal = illegal + 1 end
         end
     end
@@ -1766,6 +1782,261 @@ for dirpath, _, files in os.walk(SHIP):
         if fn in ("README.md", "CHANGELOG.md", "horticulture_config.lua", "horticulture_perks.lua") and re.search(r"\b(ring|circle|five minis|level 75)\b", text, re.I):
             bad.append(rel + ": ring/circle")
 check("secrecy: no summoning, ritual or post-v1 text shipped; README, CHANGELOG, config and perks never mention a ring", not bad, bad)
+
+# Rootstock: prime cuttings, vigour, yields --------------------------------
+L = fresh()
+rs = L.eval(r"""function()
+    local R = require("horticulture_splice_rules")
+    local out = {}
+    local function say(k, v) out[#out + 1] = k .. "=" .. tostring(v) end
+    say("tended5", R.TendedYield(5)) say("tended3", R.TendedYield(3))
+    say("pick", R.PickYield("FPD_Potato", 0)) say("pick99", R.PickYield("FPD_Potato", 99)) say("pickflax", R.PickYield("FPD_Flax", 40))
+    say("pickbase1", R.PickYield("FPD_Potato", 0, { yield = 1 })) say("pickbase1f30", R.PickYield("FPD_Potato", 30, { yield = 1 }))
+    say("fxp", R.PickFarmingXp("FPD_Potato", 5)) say("fxp1", R.PickFarmingXp("FPD_Potato", 1))
+    local function counts(opts) local p = R.Products("FPD_Cabbage", "FPD_Potato", opts) return p[1].count end
+    say("plain", counts({ plot = true }))
+    say("tended", counts({ plot = true, compost = true, water = true, tier = 1 }))
+    say("prime", counts({ plot = true, compost = true, water = true, prime = true, tier = 1 }))
+    say("prime50", counts({ plot = true, compost = true, water = true, prime = true, tier = 1, farming = 50 }))
+    local onion = R.Products("FPD_Onion", "FPD_Potato", { plot = true, compost = true, water = true, tier = 1 })
+    local onion2 = R.Products("FPD_Onion", "FPD_Potato", { plot = true, compost = true, water = true, tier = 2 })
+    say("soft", onion[1].count .. "/" .. onion2[1].count)
+    say("treepick", R.Products("FPD_Potato", "Ash", { tree = true })[1].count)
+    say("q_tended", R.CuttingQuality({ species = "FPD_Cabbage", from = "plot", water = 1, fert = 1, tier = 1 }))
+    say("q_dry", R.CuttingQuality({ species = "FPD_Cabbage", from = "plot", water = 0, fert = 1, tier = 1 }))
+    say("q_lowtier", R.CuttingQuality({ species = "FPD_Onion", from = "plot", water = 1, fert = 1, tier = 1 }))
+    say("q_wild", R.CuttingQuality({ species = "FPD_Cabbage", from = "wild", water = 1, fert = 1, tier = 9 }))
+    local ok, why = R.CanCut({ species = "FPD_Cabbage", kind = "crop", from = "wild", level = 1, alive = true })
+    say("wild", tostring(ok) .. "|" .. why)
+    ok, why = R.CanCut({ species = "FPD_Cabbage", kind = "crop", from = "plot", growth = 0, level = 1, alive = true })
+    say("young", tostring(ok) .. "|" .. why)
+    say("bonus", R.GraftBonus(2, { kind = "plot", water = 1, fert = 1 }, 50))
+    say("dormant", R.DormantText("FPD_Potato"))
+    R.Configure({ wild_cuttings = true, vigour_picks = 6, pick_farming_xp_cap = 3, compost_multiplier = 2 })
+    say("cfg", R.ROOTSTOCK.vigourPicks .. " " .. R.PickFarmingXp("FPD_Potato", 5) .. " " .. R.TendedYield(5)
+        .. " " .. tostring((R.CanCut({ species = "FPD_Cabbage", kind = "crop", from = "wild", level = 1, alive = true }))))
+    return table.concat(out, "\n")
+end""")()
+rv = dict(line.split("=", 1) for line in rs.split("\n"))
+check("rootstock: a tended plot of a base-5 crop gives 10, of a base-3 crop 6 (vanilla compost then water)",
+      rv["tended5"] == "10" and rv["tended3"] == "6", rv)
+check("rootstock: a tree pick is the vanilla harvest, never over half a tended plot (potato 5 at any Farming; flax 3)",
+      rv["pick"] == "5" and rv["pick99"] == "5" and rv["pickflax"] == "3", rv)
+check("rootstock: Farming adds one a pick per 10 levels up to that cap (base 1: 1, then 2 at Farming 30)",
+      rv["pickbase1"] == "1" and rv["pickbase1f30"] == "2", rv)
+check("rootstock: pick Farming XP is a quarter of a plot harvest's, at most 8", rv["fxp"] == "8" and rv["fxp1"] == "4", rv)
+check("rootstock: crop-on-crop extra 2 plain, 4 tended, 6 prime (plot total 14-16 against 10), more with Farming",
+      rv["plain"] == "2" and rv["tended"] == "4" and rv["prime"] == "6" and rv["prime50"] == "8", rv)
+check("rootstock: soft plot tier: an onion graft in an ash plot gets no compost or water bonus", rv["soft"] == "2/4", rv["soft"])
+check("rootstock: a Tuberwood pick uses the pick yield", rv["treepick"] == "5", rv)
+check("rootstock: prime cutting only from a watered, composted plot of the crop's tier",
+      rv["q_tended"] == "2" and rv["q_dry"] == "1" and rv["q_lowtier"] == "1" and rv["q_wild"] == "1", rv)
+check("rootstock: no cuttings from wild crops", rv["wild"].startswith("false|Wild plants"), rv["wild"])
+check("rootstock: no cutting from a crop sown today", rv["young"].startswith("false|Too young"), rv["young"])
+check("rootstock: tending raises the graft chance (prime 10, water 5, compost 5, Farming 50: 5)", rv["bonus"] == "25", rv["bonus"])
+check("rootstock: dormant text names the prime cutting", rv["dormant"] == "Dormant: needs a prime potato cutting", rv["dormant"])
+check("rootstock: config.txt numbers reach the rules", rv["cfg"] == "6 3 12 true", rv["cfg"])
+
+L = fresh()
+vg = L.eval(r"""function()
+    local Core = require("horticulture_splice_core")
+    local R = require("horticulture_splice_rules")
+    local st = require("horticulture_splice_store").New()
+    local out = {}
+    local function say(...) out[#out + 1] = table.concat({ ... }, " ") end
+    local plot = { species = "FPD_Potato", kind = "crop", key = "plot:1", level = 5, alive = true, from = "plot", growth = 1, water = 1, fert = 1, tier = 1 }
+    local c = Core.TakeCutting(st, plot)
+    say("first", c.quality)
+    st.cuttings = {}
+    st.dawn = 1
+    c = Core.TakeCutting(st, plot)
+    say("cooldown", c.quality)
+    st.cuttings = {}
+    st.dawn = 2
+    c = Core.TakeCutting(st, plot)
+    say("again", c.quality)
+    local ash = { species = "Ash", kind = "tree", planted = true, x = 0, y = 0, z = 0 }
+    local g = Core.Graft(st, ash, 5)
+    Core.Dawn(st, 5, function() return 1 end)
+    say("vigour", g.state, g.vigour)
+    for i = 1, 4 do
+        local p = Core.Pick(st, g)
+        say("pick" .. i, p and p[1].count or "-", g.vigour)
+        Core.Dawn(st, 5, function() return 1 end)
+    end
+    local ok, why, reason = Core.CanPick(st, g)
+    say("dormant", tostring(ok), why, tostring(reason))
+    say("fell-dormant", #Core.Felled({ grafts = { g }, dawn = st.dawn }, g))
+    st.grafts = { g }
+    st.cuttings = { { species = "FPD_Potato", taken = st.dawn, quality = 1 } }
+    st.selected = 1
+    local _, w = Core.CanGraft(st, ash, 5)
+    say("common", w)
+    st.cuttings = { { species = "FPD_Cabbage", taken = st.dawn, quality = 2 } }
+    _, w = Core.CanGraft(st, ash, 5)
+    say("othercrop", w)
+    st.cuttings = { { species = "FPD_Potato", taken = st.dawn, quality = 2 } }
+    local g2, how = Core.Graft(st, ash, 5)
+    say("refresh", tostring(g2 == g), tostring(how), g.vigour, #st.cuttings, g.state)
+    local p = Core.Pick(st, g)
+    say("woken", p and p[1].count or "-", g.vigour)
+    say("fell-picked", #Core.Felled({ grafts = { g }, dawn = st.dawn }, g))
+    g.lastPick = st.dawn - 1
+    local f = Core.Felled({ grafts = { g }, dawn = st.dawn }, g)
+    say("fell", #f, f[1] and f[1].count or "-")
+    -- crop on crop: tending seen on the graft feeds the harvest
+    local h = { id = "h", kind = "plot", state = "hybrid", plants = { "FPD_Potato", "FPD_Cabbage" }, host = "FPD_Potato", scion = "FPD_Cabbage",
+        tier = 1, fed = true, wet = true, quality = 2 }
+    local hp = Core.Harvested({ grafts = { h } }, h)
+    say("harvest", hp[1].count)
+    -- tree on tree never runs on vigour
+    say("treeontree", tostring(R.UsesVigour({ kind = "tree", scion = "Oak", host = "Ash" })))
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("prime: one prime cutting a plot per crop cycle (common inside the cooldown, prime again after)",
+      vg[0] == "first 2" and vg[1] == "cooldown 1" and vg[2] == "again 2", vg[:3])
+check("vigour: a prime crop scion on a tree starts with 4 picks", vg[3] == "vigour hybrid 4", vg[3])
+check("vigour: each pick uses one", vg[4:8] == ["pick1 5 3", "pick2 5 2", "pick3 5 1", "pick4 5 0"], vg[4:8])
+check("vigour: then the tree is dormant, saying it needs a prime cutting", vg[8] == "dormant false Dormant: needs a prime potato cutting dormant", vg[8])
+check("felling a dormant tree drops nothing extra", vg[9] == "fell-dormant 0", vg[9])
+check("dormant tree refuses a common cutting, saying where prime ones come from", vg[10].startswith("common Dormant: needs a prime potato cutting. Prime cuttings come from"), vg[10])
+check("dormant tree refuses another crop's cutting", vg[11].startswith("othercrop This is already"), vg[11])
+check("a prime cutting of the same crop refreshes it at once (no dawn roll)", vg[12] == "refresh true refresh 4 0 hybrid", vg[12])
+check("refreshed scion picks again", vg[13] == "woken 5 3", vg[13])
+check("felled the day it was picked: no produce", vg[14] == "fell-picked 0", vg[14])
+check("felled with a pick left: one pick's worth with the logs", vg[15] == "fell 1 5", vg[15])
+check("crop-on-crop harvest uses the graft's tending and prime", vg[16] == "harvest 6", vg[16])
+check("tree-on-tree hybrids have no vigour", vg[17] == "treeontree false", vg[17])
+
+st3 = L.eval(r"""function(path)
+    local Store = require("horticulture_splice_store")
+    local st = Store.New()
+    st.dawn = 7
+    st.cuttings = { { species = "FPD_Potato", taken = 7, quality = 2 }, { species = "FPD_Cabbage", taken = 6 } }
+    st.primeSources = { ["plot:1"] = 6 }
+    st.grafts = {
+        Store.SetPlants({ id = "g1", kind = "tree", state = "hybrid", x = 1, y = 2, z = 3, quality = 2, vigour = 2 }, { "Ash", "FPD_Potato" }),
+        Store.SetPlants({ id = "g2", kind = "plot", state = "pending", key = "plot:2", x = 1, y = 2, z = 3, fed = true, wet = false }, { "FPD_Potato", "FPD_Cabbage" }),
+        Store.SetPlants({ id = "g3", kind = "tree", state = "hybrid", x = 9, y = 9, z = 0 }, { "Oak", "FPD_Wheat" }),
+        Store.SetPlants({ id = "g4", kind = "tree", state = "hybrid", x = 99, y = 9, z = 0 }, { "Ash", "Oak" }),
+    }
+    Store.Save(path, st)
+    local b = Store.Load(path)
+    local g1, g2, g3, g4 = b.grafts[1], b.grafts[2], b.grafts[3], b.grafts[4]
+    return string.format("%s %s|%s %s %s|%s %s|%s|%s", tostring(b.cuttings[1].quality), tostring(b.cuttings[2].quality),
+        tostring(g1.vigour), tostring(g1.quality), tostring(b.primeSources["plot:1"]), tostring(g2.fed), tostring(g2.wet),
+        tostring(g3.vigour), tostring(g4.vigour))
+end""")(os.path.join(TMP, "v3.txt"))
+check("store v3: cutting quality, vigour, prime sources and tending round-trip; old crop-on-tree hybrids get 4 picks",
+      st3 == "2 1|2 2 6|true false|4|nil", st3)
+
+bk = L.eval(r"""function()
+    local P = require("horticulture_placement")
+    local function axes(r)
+        local p, y, rl = math.rad(r.Pitch), math.rad(r.Yaw), math.rad(r.Roll)
+        local CP, SP, CY, SY, CR, SR = math.cos(p), math.sin(p), math.cos(y), math.sin(y), math.cos(rl), math.sin(rl)
+        return { X = CP * CY, Y = CP * SY, Z = SP }, { X = -(CR * SP * CY + SR * SY), Y = CY * SR - CR * SP * SY, Z = CR * CP }
+    end
+    local out = {}
+    local flat = P.Normal(100, 100, 100, 100, 40)
+    local r = P.GroundRotation(flat, 314)
+    out[#out + 1] = string.format("flat %.3f %.1f %.1f %.1f", flat.Z, r.Pitch + 0.0, (r.Yaw + 360) % 360, r.Roll + 0.0)
+    local worst, worstYaw = 0, 0
+    for _, s in ipairs({ { 30, 0 }, { 0, 25 }, { -18, 12 }, { 40, -35 } }) do
+        local n = P.Normal(math.tan(math.rad(s[1])) * 40, -math.tan(math.rad(s[1])) * 40, math.tan(math.rad(s[2])) * 40, -math.tan(math.rad(s[2])) * 40, 40)
+        for _, yaw in ipairs({ 0, 90, 200, 314 }) do
+            local f, u = axes(P.GroundRotation(n, yaw))
+            worst = math.max(worst, math.abs(u.X - n.X), math.abs(u.Y - n.Y), math.abs(u.Z - n.Z))
+            local d = math.abs(((math.deg(math.atan(f.Y, f.X)) - yaw) + 540) % 360 - 180)
+            worstYaw = math.max(worstYaw, d)
+        end
+    end
+    out[#out + 1] = string.format("slope %.6f %.6f", worst, worstYaw)
+    local up = P.Normal(80, -80, 0, 0, 40)
+    out[#out + 1] = string.format("uphill %.1f", P.GroundRotation(up, 180).Pitch)
+    out[#out + 1] = "missing " .. P.Normal(nil, 1, 1, 1, 40).Z
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("book: flat ground keeps it flat, turned to its yaw", bk[0] == "flat 1.000 0.0 314.0 0.0", bk[0])
+check("book: on any slope its up axis is the ground normal and it still faces its yaw", bk[1] == "slope 0.000000 0.000000", bk[1])
+check("book: facing downhill it tips forward (ground rising to +X, facing -X)", bk[2] == "uphill -63.4", bk[2])
+check("book: a missed trace leaves it flat", bk[3] in ("missing 1", "missing 1.0"), bk[3])
+
+# Rootstock through the game glue: dormancy, refresh, felling, tended harvest.
+drop(save)
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+g = L.globals()
+potato = g.tended(g.plot("FPD_Potato", 1, 50))
+ash = g.tree("Ash", True, 300)
+g.nearby = L.table_from([potato, ash])
+g.aimed = potato
+g.press("G")
+g.aimed = ash
+g.press("G")
+g.S.Dawn("test")
+for _ in range(4):
+    g.tick()
+g.take("cards"); g.take("xp"); g.take("awards"); g.take("given")
+for i in range(4):
+    g.press("G")
+    g.S.Dawn("test")
+    for _ in range(3):
+        g.tick()
+c = g.take("cards")
+gv = g.take("given")
+check("glue: four picks on a Tuberwood Ash, then it goes dormant", gv.count("ITEM_Resources_Potatox5") == 4 and "It goes dormant: graft a prime potato cutting" in c, c)
+g.promptHost = ash
+check("glue: the name tag and prompt say dormant", g.S.TagText() == "Tuberwood Ash (dormant)", g.S.TagText())
+g.promptHost = None
+g.press("G")
+c = g.take("cards")
+check("glue: G on a dormant tree says it needs a prime cutting and where they come from",
+      "Dormant: needs a prime potato cutting" in c and "Prime cuttings come from a watered, composted crop" in c and g.take("given") == "", c)
+g.S.InspectGraft()
+c = g.take("cards")
+check("glue: Check graft explains dormancy", "HYBRID|Tuberwood Ash|Dormant" in c and "Prime cuttings come from" in c, c)
+g.aimed = potato
+g.press("G")
+c = g.take("cards")
+check("glue: the tended plot gives a new prime cutting after its cycle", "PRIME CUTTING|Potato|" in c, c)
+g.take("xp")
+g.aimed = ash
+g.press("G")
+c = g.take("cards")
+x = g.take("xp")
+check("glue: a prime cutting wakes the dormant tree at once", "SCION REFRESHED|Tuberwood Ash|" in c and "4 picks" in c and "Hybrid refreshed=15" in x, (c, x))
+ash.kind = "stump"
+for _ in range(3):
+    g.tick()
+gv = g.take("given")
+c = g.take("cards")
+x = g.take("xp")
+check("glue: felling it drops one pick's worth with the logs, no XP", "ITEM_Resources_Potatox5" in gv and "FELLED|Tuberwood Ash|" in c
+      and "Hybrid picked" not in x and "Farming" not in x, (gv, c, x))
+
+drop(save)
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+g = L.globals()
+cabbage = g.tended(g.plot("FPD_Cabbage", 1, 50))
+potato = g.tended(g.plot("FPD_Potato", 1, 400))
+g.nearby = L.table_from([cabbage, potato])
+g.aimed = cabbage
+g.press("G")
+g.aimed = potato
+g.press("G")
+g.S.Dawn("test")
+for _ in range(4):
+    g.tick()
+g.take("given")
+potato.stage = 2
+g.tick()
+potato.stage = 0
+potato.species = None
+g.tick()
+gv = g.take("given")
+check("glue: a prime Brassitato in a watered, composted plot adds 6 cabbages (vanilla potatoes come on top)", "ITEM_Resources_Cabbagex6" in gv, gv)
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):

@@ -186,9 +186,9 @@ local function show_card(kicker, title, detail, seconds)
 end
 
 -- Says why something could not be done.
-local function refuse(kicker, why)
+local function refuse(kicker, why, detail)
     U.log(kicker .. ": " .. tostring(why))
-    show_card(kicker, why, "", 3.5)
+    show_card(kicker, why, detail or "", detail and 5 or 3.5)
 end
 
 local function xp(amount, label)
@@ -324,6 +324,13 @@ end
 -- Crop grafts follow their plot: harvest ends a hybrid with a bonus, a
 -- plot that empties or dies ends a pending graft.
 local function watch_plot(g, c)
+    -- Tending seen while the graft grows feeds the vanilla multipliers at harvest.
+    local fed = g.fed or (c.fert == 1 and c.stage ~= 0)
+    local wet = g.wet or (c.water == 1 and c.stage == 1)
+    if fed ~= (g.fed or false) or wet ~= (g.wet or false) then
+        g.fed, g.wet = fed, wet
+        save()
+    end
     local was = plotStage[g.id]
     plotStage[g.id] = c.stage
     if was == nil or was == c.stage then
@@ -332,12 +339,14 @@ local function watch_plot(g, c)
     end
     if was == 2 and (c.stage == 0 or c.stage == 3 or c.stage == 1) then
         if g.state == "hybrid" then
-            local products = Core.Harvested(st, g)
+            local products = Core.Harvested(st, g, { farming = skills().Farming })
             Looks.Clear(g.id)
             plotStage[g.id] = nil
             save()
             local parts = give_products(products)
             xp(Rules.XP.pick, "Hybrid harvested")
+            U.log(string.format("Hybrid harvest %s: %s (compost %s, water %s, prime %s, plot tier %s)", g.id,
+                table.concat(parts, ", "), tostring(g.fed), tostring(g.wet), tostring((g.quality or 1) >= 2), tostring(g.tier)))
             card("HYBRID HARVEST", Rules.HybridName(g.scion, g.host),
                 #parts > 0 and ("The graft gave " .. table.concat(parts, ", ") .. " as well.") or "The graft gave nothing extra this time.")
         else
@@ -353,6 +362,29 @@ local function hybrid_name(g)
     return g.plants and #g.plants > 2 and Rules.PlantsName(g.plants) or Rules.HybridName(g.scion, g.host)
 end
 
+local function dormant(g)
+    return g and g.state == "hybrid" and Rules.UsesVigour(g) and (g.vigour or 0) <= 0
+end
+
+local function refuse_pick(g, why)
+    if dormant(g) then refuse("DORMANT", why, Rules.PRIME_HOWTO .. ".") else refuse("NOTHING TO PICK", why) end
+end
+
+-- The name the game's prompt shows on a hybrid tree; a dormant one says so.
+local function prompt_name(g)
+    if dormant(g) then return hybrid_name(g) .. " (dormant)" end
+    return hybrid_name(g)
+end
+
+-- Tree pick options: the Farming level and the vanilla crop values.
+local function tree_opts(g)
+    local live = {}
+    for _, p in ipairs(Rules.Products(g.scion, g.host)) do
+        if Rules.IsCrop(p.species) then live[p.species] = World.CropValues(p.species) end
+    end
+    return { farming = skills().Farming, live = live }
+end
+
 local function refresh_looks()
     if not ensure_state() or #st.grafts == 0 then return end
     local me = U.location(U.pawn())
@@ -366,7 +398,7 @@ local function refresh_looks()
             Looks.Clear(g.id)
         elseif c.kind == "stump" then
             if cfg.promptNames ~= false then Names.Restore(U, c.actor) end
-            local products = g.state == "hybrid" and Rules.Products(g.scion, g.host) or {}
+            local products = Core.Felled(st, g, tree_opts(g))
             end_graft(g, "felled")
             if #products > 0 then
                 local parts = give_products(products)
@@ -379,7 +411,7 @@ local function refresh_looks()
                 local id = Rules.HybridId(g.scion, g.host)
                 local placed = Looks.Apply(g, look_host(c), g.state == "hybrid" and "hybrid" or "pending", id)
                 if g.state == "hybrid" and c.kind == "tree" and cfg.promptNames ~= false then
-                    Names.Set(U, c.actor, hybrid_name(g))
+                    Names.Set(U, c.actor, prompt_name(g))
                 end
                 U.log_once("look" .. g.id .. g.state, string.format("%s look on %s: %d piece(s)",
                     g.state == "hybrid" and Rules.HybridName(g.scion, g.host) or "Pending graft", U.fname(c.actor or c.obj), placed))
@@ -524,8 +556,10 @@ end
 local function source_of(c)
     local crop = c.kind == "plot" or c.kind == "wild"
     local src = { species = c.species, kind = crop and "crop" or "tree", level = level(), alive = c.alive, skills = skills() }
+    if crop then src.from = c.kind end
     if c.kind == "plot" then
         src.key = c.key
+        src.stage, src.growth, src.water, src.fert, src.tier = c.stage, c.growth, c.water, c.fert, c.tier
     elseif c.kind == "wild" then
         src.key = string.format("wild:%s@%d,%d", tostring(c.species), math.floor(c.loc.X / 300), math.floor(c.loc.Y / 300))
     else
@@ -537,10 +571,12 @@ end
 
 local function host_from(c)
     local tier = c.tier
+    local sel = st and Core.Selected(st)
     return {
         species = c.species, kind = c.kind, key = c.kind == "plot" and c.key or nil, planted = c.planted,
         stage = c.stage, tier = tier, x = c.loc.X, y = c.loc.Y, z = c.loc.Z, world = World.WorldKey(),
-        skills = skills(),
+        skills = skills(), water = c.water, fert = c.fert,
+        bonus = Rules.GraftBonus(sel and sel.quality, c, skills().Farming),
     }
 end
 
@@ -553,15 +589,29 @@ local function take_cutting(c)
     if not cut then refuse("NO CUTTING", why) return end
     save()
     xp(Rules.XP.cutting, "Cutting taken")
-    card("CUTTING TAKEN", Rules.Name(cut.species),
-        string.format("Satchel %d/%d. Graft it within %d dawns.", #st.cuttings, Rules.SATCHEL_SIZE, Rules.WILT_DAWNS))
-    U.log("Cutting taken: " .. cut.species)
+    local prime = (cut.quality or 1) >= 2
+    local hint = ""
+    if Rules.IsCrop(cut.species) then
+        hint = prime and " Prime: a tree will take it." or " Common: for crops only. " .. Rules.PRIME_HOWTO .. "."
+    end
+    card(prime and "PRIME CUTTING" or "CUTTING TAKEN", Rules.Name(cut.species),
+        string.format("Satchel %d/%d. Graft it within %d dawns.%s", #st.cuttings, Rules.SATCHEL_SIZE, Rules.WILT_DAWNS, hint))
+    U.log("Cutting taken: " .. cut.species .. (prime and " (prime)" or ""))
 end
 
 local function graft(c)
     local g, why = Core.Graft(st, host_from(c), level())
     if not g then return false, why end
     save()
+    if why == "refresh" then
+        xp(Rules.XP.refresh, "Hybrid refreshed")
+        card("SCION REFRESHED", hybrid_name(g),
+            string.format("The prime cutting woke it: %d picks before it rests again.", g.vigour or 0))
+        U.log(string.format("Graft %s refreshed: vigour %d", g.id, g.vigour or 0))
+        hostsCache.at = -100
+        refresh_looks()
+        return true
+    end
     xp(Rules.XP.graft, "Graft made")
     local chance = Core.ChanceFor(st, g, level())
     local pair = Rules.Name(g.scion) .. " onto " .. Rules.Name(g.host):lower()
@@ -575,14 +625,40 @@ local function graft(c)
     return true
 end
 
+-- Vanilla Farming XP for a pick (pick_farming_xp in config.txt): a share of
+-- what harvesting the same crop in a plot pays, capped.
+local function farming_xp(products, opts)
+    if cfg.pickFarmingXp == false then return 0 end
+    local total = 0
+    for _, p in ipairs(products) do
+        if Rules.IsCrop(p.species) then
+            total = total + Rules.PickFarmingXp(p.species, p.count, opts.live and opts.live[p.species])
+        end
+    end
+    total = math.min(total, Rules.ROOTSTOCK.pickFarmingXpCap)
+    if total <= 0 then return 0 end
+    local gained = World.AddFarmingXp(total, "Horticulture pick")
+    return gained or 0
+end
+
 local function pick(g)
-    local products, why = Core.Pick(st, g)
+    if not g then return false, "Nothing is grafted onto this plant" end
+    local opts = tree_opts(g)
+    local products, why = Core.Pick(st, g, opts)
     if not products then return false, why end
     save()
     local parts = give_products(products)
     xp(Rules.XP.pick, "Hybrid picked")
+    local farmed = farming_xp(products, opts)
+    local after = "More after dawn."
+    if Rules.UsesVigour(g) then
+        after = (g.vigour or 0) > 0 and string.format("%d pick%s left on this scion.", g.vigour, g.vigour == 1 and "" or "s")
+            or "It goes dormant: graft a prime " .. Rules.Name(g.scion):lower() .. " cutting to wake it."
+        hostsCache.at = -100
+    end
+    U.log(string.format("Picked %s: %s, vigour %s, Farming XP %s", g.id, table.concat(parts, ", "), tostring(g.vigour), tostring(farmed)))
     card("PICKED", Rules.HybridName(g.scion, g.host),
-        (#parts > 0 and table.concat(parts, ", ") or "Nothing could be added to your pack") .. ". More after dawn.")
+        (#parts > 0 and table.concat(parts, ", ") or "Nothing could be added to your pack") .. ". " .. after)
     return true
 end
 
@@ -669,7 +745,7 @@ local function interact_pick()
         pick(g)
     elseif now() - interactRefusedAt > 8 then
         interactRefusedAt = now()
-        refuse("NOTHING TO PICK", why)
+        refuse_pick(g, why)
     end
     return true
 end
@@ -701,7 +777,7 @@ function Splicing.Action()
     if g and g.state == "hybrid" and g.kind ~= "plot" then
         local ok, why = Core.CanPick(st, g)
         if ok then pick(g) return end
-        if not Core.Selected(st) then refuse("NOTHING TO PICK", why) return end
+        if not Core.Selected(st) then refuse_pick(g, why) return end
         pickWhy = why
     end
     if c.kind == "stump" then refuse("HORTICULTURE", "Nothing grows from a stump") return end
@@ -712,7 +788,7 @@ function Splicing.Action()
         local ok, why = graft(c)
         if ok then return end
         -- A hybrid picked today: its harvest is the news, not the graft.
-        if pickWhy then refuse("NOTHING TO PICK", pickWhy) return end
+        if pickWhy and not dormant(g) then refuse("NOTHING TO PICK", pickWhy) return end
         U.log("CANNOT GRAFT: " .. tostring(why))
         if not cfg.quiet then
             show_card("CANNOT GRAFT", why, "Alt+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
@@ -783,8 +859,9 @@ end
 
 function Splicing.WheelPick()
     if not ready() then return end
-    local ok, why = pick(aimed_graft())
-    if not ok then refuse("NOTHING TO PICK", why) end
+    local g = aimed_graft()
+    local ok, why = pick(g)
+    if not ok then refuse_pick(g, why) end
 end
 
 function Splicing.WheelGraft(index)
@@ -833,8 +910,16 @@ function Splicing.InspectGraft()
             string.format("Waiting for dawn. About %d%% it takes.", Core.ChanceFor(st, g, level())), 4)
         return
     end
-    local _, why = Core.CanPick(st, g)
-    show_card("HYBRID", Rules.HybridName(g.scion, g.host), why and (why .. ".") or "Ready to pick.", 4)
+    local _, why, reason = Core.CanPick(st, g)
+    local text = why and (why .. ".") or "Ready to pick."
+    if reason == "dormant" then
+        text = text .. " " .. Rules.PRIME_HOWTO .. "."
+    elseif Rules.UsesVigour(g) then
+        text = string.format("%s %d pick%s left before it rests.", text, g.vigour or 0, g.vigour == 1 and "" or "s")
+    elseif g.kind == "plot" then
+        text = text .. (g.fed and " Composted." or " Not composted.") .. (g.wet and " Watered." or " Not watered.")
+    end
+    show_card("HYBRID", Rules.HybridName(g.scion, g.host), text, 4)
 end
 
 -- Status ------------------------------------------------------------------
@@ -1005,7 +1090,7 @@ function Splicing.TagText()
         if host.kind == "stump" then return nil end
         local g = Core.GraftOn(st, as_point(host))
         if not (g and g.state == "hybrid") then return nil end
-        local name = hybrid_name(g)
+        local name = prompt_name(g)
         if host.kind == "tree" and Names.Has(U, host.actor, name) then return nil end
         return name
     end
@@ -1050,7 +1135,7 @@ function Splicing.TargetName(target)
     if best then return Primelet.Name(best) end
     local kind = (target.kind == "plot" or target.kind == "crop") and "plot" or "tree"
     local g = Core.GraftOn(st, { kind = kind, x = target.x, y = target.y })
-    if g and g.state == "hybrid" then return hybrid_name(g) end
+    if g and g.state == "hybrid" then return prompt_name(g) end
     return nil
 end
 

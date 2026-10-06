@@ -34,6 +34,7 @@ local PREFERRED_TEMPLATE = "JOURNAL_Know_LoreScrap_C4"
 -- around the cabbage patch hides it.
 local BOOK_LIFT = 12
 local BOOK_SCALE = 1.75
+local SLOPE_SAMPLE = 40
 local SPAWN_RANGE = 15000
 local READ_RANGE = 300
 local TARGET_GRACE = 0.6
@@ -43,6 +44,7 @@ local FALLBACK_SECONDS = 3.0
 local cfg = nil
 local place = nil
 local groundZ = nil
+local groundUp = nil
 local book = nil
 local bookMode = nil
 local bookFor = nil
@@ -182,18 +184,29 @@ local function trace_ground(x, y, nearZ)
     return z
 end
 
+-- The book lies along the slope: four traces around the spot give the
+-- ground's tilt, and the lift is along that up vector, so no corner sinks
+-- into a hillside.
 local function spot()
     local p = place
     local z = p.z or groundZ
-    if not z then
+    if not z or not groundUp then
         local me = U.location(U.pawn())
         if not me then return nil end
-        groundZ = trace_ground(p.x, p.y, me.Z)
-        if not groundZ then return nil end
-        U.log(string.format("Book ground found at z %.0f by line trace", groundZ))
-        z = groundZ
+        local near = z or me.Z
+        if not z then
+            groundZ = trace_ground(p.x, p.y, near)
+            if not groundZ then return nil end
+            z = groundZ
+        end
+        local r = SLOPE_SAMPLE
+        groundUp = Placement.Normal(trace_ground(p.x + r, p.y, z), trace_ground(p.x - r, p.y, z),
+            trace_ground(p.x, p.y + r, z), trace_ground(p.x, p.y - r, z), r)
+        U.log(string.format("Book ground at z %.0f, tilted %.1f degrees", z, math.deg(math.acos(groundUp.Z))))
     end
-    return { X = p.x, Y = p.y, Z = z + BOOK_LIFT }, { Pitch = 0, Yaw = p.yaw or 0, Roll = 0 }
+    local n = groundUp
+    return { X = p.x + n.X * BOOK_LIFT, Y = p.y + n.Y * BOOK_LIFT, Z = z + n.Z * BOOK_LIFT },
+        Placement.GroundRotation(n, p.yaw or 0)
 end
 
 local function load_object(path)
@@ -269,6 +282,7 @@ local function spawn_book()
     local existing = adopt_existing(loc)
     if existing then
         book, bookMode = existing, "loreitem"
+        pcall(function() existing:K2_SetActorLocationAndRotation(loc, rot, false, {}, false) end)
         configure(existing)
         U.log("Book already in the world here; using it")
         return
@@ -301,7 +315,7 @@ end
 
 local function ensure_book()
     if not in_world() then
-        book, groundZ, session = nil, nil, nil
+        book, groundZ, groundUp, session = nil, nil, nil, nil
         return
     end
     if U.valid(book) and bookFor == cfg.ESL.Character() then return end
@@ -614,7 +628,7 @@ function Book.Place() return place end
 
 function Book.SetPlace(p)
     place = p
-    groundZ = nil
+    groundZ, groundUp = nil, nil
     if U.valid(book) then pcall(function() book:K2_DestroyActor() end) end
     book = nil
     spawnFailures = 0

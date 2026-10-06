@@ -29,7 +29,52 @@ Rules.XP = {
     primelet = 200,
     primeletStage = 30,
     tend = 5,
+    refresh = 15,
 }
+
+-- Rootstock (Dragonwilds docs, HORTICULTURE_FARMING_SYNERGY.md): plots are
+-- Horticulture's nursery. Crop cuttings come only from plot crops; a prime
+-- cutting (watered, composted, in a plot of at least the crop's tier, once
+-- per crop cycle) is what a tree needs, and it gives the tree vigour for a
+-- set number of picks. config.txt overrides these through Rules.Configure.
+Rules.ROOTSTOCK = {
+    wildCuttings = false,
+    primeCooldown = 2,       -- dawns between prime cuttings from one plot (a crop cycle)
+    vigourPicks = 4,         -- picks a prime cutting gives a hybrid tree
+    compostMult = 1.5,       -- vanilla compost yield multiplier
+    waterMult = 1.15,        -- vanilla water yield multiplier
+    farmingScaleCap = 1.25,  -- crop-on-crop Farming scaling cap (the iron secateurs' 1.25)
+    primeShare = 1,          -- extra share a prime crop-on-crop graft adds
+    pickPerFarming = 10,     -- a tree pick grows by 1 per this many Farming levels
+    pickFarmingXpShare = 0.25, -- of the vanilla harvest XP for the same yield
+    pickFarmingXpCap = 8,
+    primeBonus = 10,         -- graft chance points
+    waterBonus = 5,
+    compostBonus = 5,
+    farmingBonusCap = 10,    -- +1 per 5 Farming levels above 25
+}
+
+-- Vanilla per-harvest BaseYield (FPD_* assets, build 25632050): 5, or 3
+-- for flax. Read live from the game when the asset is loaded.
+Rules.BASE_YIELD = { FPD_Flax = 3 }
+Rules.DEFAULT_BASE_YIELD = 5
+-- Vanilla harvest XP: ceil(Harvesting 8 x (1 + yield x HarvestXpFactor)),
+-- factor 1/2/3 for plot tier 1/2/3+ (FARMING_25_MEASUREMENT.md).
+Rules.HARVEST_XP_BASE = 8
+
+local CONFIG_KEYS = {
+    wild_cuttings = "wildCuttings", prime_cooldown_dawns = "primeCooldown", vigour_picks = "vigourPicks",
+    compost_multiplier = "compostMult", water_multiplier = "waterMult", farming_scale_cap = "farmingScaleCap",
+    prime_share = "primeShare", pick_per_farming_levels = "pickPerFarming",
+    pick_farming_xp_share = "pickFarmingXpShare", pick_farming_xp_cap = "pickFarmingXpCap",
+}
+
+-- Copies the Rootstock numbers from the player's config.
+function Rules.Configure(cfg)
+    for key, field in pairs(CONFIG_KEYS) do
+        if cfg and cfg[key] ~= nil then Rules.ROOTSTOCK[field] = cfg[key] end
+    end
+end
 
 -- A hybrid is an ordered list of plants: the host first, then each cutting
 -- grafted onto it. v1 stops at two; the 1-99 plan's Triple Graft (level 50)
@@ -65,6 +110,7 @@ Rules.TREES = {
 
 local PLANT = "/Game/Gameplay/Items/Resources/Plant/"
 local FOOD = "/Game/Gameplay/Items/Consumables/Food/Items/v3/"
+local HERB = "/Game/Gameplay/Items/Resources/Herb/"
 
 -- Crops, keyed by their FarmPlantDataAsset name. plot: the lowest plot tier
 -- in the asset's Farming.Tiers tags (the game data, used by SkillGates).
@@ -74,11 +120,11 @@ Rules.CROPS = {
     FPD_Wheat = { name = "Wheat", band = 10, tier = 1, plot = 1, item = PLANT .. "ITEM_Resources_Wheat" },
     FPD_Redberry = { name = "Redberry", band = 10, tier = 1, plot = 1, item = FOOD .. "ITEM_Consumable_Fruit_Redberry" },
     FPD_Flax = { name = "Flax", band = 13, tier = 1, plot = 1, item = PLANT .. "ITEM_Resources_Flax" },
-    FPD_Harralander = { name = "Harralander", band = 15, tier = 1.5, plot = 1 },
-    FPD_Marrentill = { name = "Marrentill", band = 15, tier = 1.5, plot = 1 },
+    FPD_Harralander = { name = "Harralander", band = 15, tier = 1.5, plot = 1, item = HERB .. "ITEM_Herb_Harralander" },
+    FPD_Marrentill = { name = "Marrentill", band = 15, tier = 1.5, plot = 1, item = HERB .. "ITEM_Herb_Marrentill" },
     FPD_Onion = { name = "Onion", band = 18, tier = 2, plot = 2, item = PLANT .. "ITEM_Resources_Onion" },
     FPD_Tomato = { name = "Tomato", band = 18, tier = 2, plot = 2, item = PLANT .. "ITEM_Resources_Tomato" },
-    FPD_Kwuarm = { name = "Kwuarm", band = 22, tier = 1.5, plot = 1 },
+    FPD_Kwuarm = { name = "Kwuarm", band = 22, tier = 1.5, plot = 1, item = HERB .. "ITEM_Herb_Kwuarm" },
     FPD_Dwellberry = { name = "Dwellberry", band = 22, tier = 2, plot = 2, item = FOOD .. "ITEM_Consumable_Fruit_Dwellberry" },
 }
 
@@ -265,16 +311,113 @@ function Rules.HybridId(scion, host)
     return Rules.ComboKey(scion, host)
 end
 
--- What a hybrid gives: the flagship's list, else 2 of the scion's own item.
-function Rules.Products(scion, host)
+function Rules.BaseYield(species, live)
+    if live and live.yield and live.yield > 0 then return live.yield end
+    return Rules.BASE_YIELD[species] or Rules.DEFAULT_BASE_YIELD
+end
+
+function Rules.XpFactor(species, live)
+    if live and live.factor and live.factor > 0 then return live.factor end
+    local c = Rules.CROPS[species]
+    return c and math.max(1, math.floor(c.plot or 1)) or 1
+end
+
+-- A watered, composted plot's harvest of a crop: vanilla's
+-- ceil(ceil(base x compost) x water).
+function Rules.TendedYield(base)
+    local R = Rules.ROOTSTOCK
+    return math.ceil(math.ceil(base * R.compostMult) * R.waterMult)
+end
+
+-- One pick of a crop from a hybrid tree: the vanilla per-harvest yield plus
+-- one per pickPerFarming Farming levels, never more than half a tended
+-- plot's harvest of that crop.
+function Rules.PickYield(species, farming, live)
+    local R = Rules.ROOTSTOCK
+    local base = Rules.BaseYield(species, live)
+    local n = base + math.floor((farming or 0) / math.max(1, R.pickPerFarming))
+    return math.max(1, math.min(n, math.ceil(Rules.TendedYield(base) / 2)))
+end
+
+-- Farming XP for one tree pick: pickFarmingXpShare of what harvesting the
+-- same yield of that crop in a plot pays, capped.
+function Rules.PickFarmingXp(species, yield, live)
+    local R = Rules.ROOTSTOCK
+    local plot = math.ceil(Rules.HARVEST_XP_BASE * (1 + (yield or 0) * Rules.XpFactor(species, live)))
+    return math.max(0, math.min(R.pickFarmingXpCap, math.floor(plot * R.pickFarmingXpShare)))
+end
+
+-- Crop-on-crop yield scaling with Farming: +1% a level above 25, capped.
+function Rules.FarmingScale(farming)
+    local R = Rules.ROOTSTOCK
+    return math.min(R.farmingScaleCap, 1 + math.max(0, (farming or 0) - 25) / 100)
+end
+
+-- A tree hybrid with a crop scion runs on vigour; tree-on-tree hybrids do not.
+function Rules.UsesVigour(g)
+    return g and g.kind ~= "plot" and Rules.IsCrop(g.scion)
+end
+
+-- What a hybrid gives. opts:
+--   nil                the base list (flagship counts, else 2 of the scion);
+--   { tree = true, farming, live = { [species] = { yield, factor } } }
+--                      one pick: each crop at Rules.PickYield, wood as listed;
+--   { plot = true, compost, water, prime, tier, farming }
+--                      the extra a crop-on-crop harvest adds on top of the
+--                      vanilla harvest: ceil(ceil(ceil(share x compost) x
+--                      water) x FarmingScale), share = the base count (+1
+--                      prime). Compost and water count only in a plot of at
+--                      least the product crop's own tier.
+function Rules.Products(scion, host, opts)
+    local R = Rules.ROOTSTOCK
     local f = Rules.Flagship(scion, host)
     local list = f and f.products or { { species = scion, count = 2 } }
     local out = {}
     for _, p in ipairs(list) do
         local d = Rules.CROPS[p.species] or Rules.TREES[p.species]
-        if d and d.item then out[#out + 1] = { species = p.species, count = p.count, item = d.item, name = d.name } end
+        if d and d.item then
+            local count = p.count
+            if opts and opts.tree and Rules.CROPS[p.species] then
+                count = Rules.PickYield(p.species, opts.farming, opts.live and opts.live[p.species])
+            elseif opts and opts.plot and Rules.CROPS[p.species] then
+                local share = p.count + (opts.prime and R.primeShare or 0)
+                local preferred = (opts.tier or 1) >= (Rules.CROPS[p.species].plot or 1)
+                local c = (preferred and opts.compost) and R.compostMult or 1
+                local w = (preferred and opts.water) and R.waterMult or 1
+                count = math.ceil(math.ceil(math.ceil(share * c) * w) * Rules.FarmingScale(opts.farming))
+            end
+            out[#out + 1] = { species = p.species, count = count, item = d.item, name = d.name }
+        end
     end
     return out
+end
+
+-- 2 for a prime cutting, else 1. src: a plot crop's species, from, water,
+-- fert (1 when full) and tier.
+function Rules.CuttingQuality(src)
+    local c = Rules.CROPS[src.species]
+    if not c or src.from ~= "plot" then return 1 end
+    if src.water == 1 and src.fert == 1 and (src.tier or 1) >= (c.plot or 1) then return 2 end
+    return 1
+end
+
+-- Extra graft chance from tending (the redesign's CULTIVATE step):
+-- a prime cutting, a watered and a composted host plot, and Farming above 25.
+function Rules.GraftBonus(quality, host, farming)
+    local R = Rules.ROOTSTOCK
+    local b = (quality or 1) >= 2 and R.primeBonus or 0
+    if host and host.kind == "plot" then
+        if host.water == 1 then b = b + R.waterBonus end
+        if host.fert == 1 then b = b + R.compostBonus end
+    end
+    if farming and farming > 25 then b = b + math.min(R.farmingBonusCap, math.floor((farming - 25) / 5)) end
+    return b
+end
+
+Rules.PRIME_HOWTO = "Prime cuttings come from a watered, composted crop in a plot of its own tier or better"
+
+function Rules.DormantText(scion)
+    return "Dormant: needs a prime " .. Rules.Name(scion):lower() .. " cutting"
 end
 
 -- Can this source give a cutting? src = { species, kind = "crop"|"tree",
@@ -296,8 +439,12 @@ function Rules.CanCut(src)
         if src.axePower < need then
             return false, string.format("Your axe is too weak for %s; it takes an axe that can fell it", name:lower())
         end
+    elseif src.from == "wild" and not Rules.ROOTSTOCK.wildCuttings then
+        return false, "Wild plants won't take a graft. Grow it in a plot first"
     elseif not src.alive then
         return false, "Cuttings come from a living plant"
+    elseif src.from == "plot" and src.growth == 0 then
+        return false, "Too young to cut. Wait a day"
     end
     return true
 end
@@ -306,7 +453,7 @@ end
 -- "sapling" | "tree", planted (by a player), stage (plot stage), skills
 -- (vanilla levels: both the cutting and the host must pass SkillCheck) }.
 -- Returns true, or false and a reason.
-function Rules.CanGraft(scion, host, level)
+function Rules.CanGraft(scion, host, level, quality)
     level = level or 1
     if not host or not host.species then return false, "Aim at a crop, sapling or tree you planted" end
     local sName, hName = Rules.Name(scion), Rules.Name(host.species)
@@ -315,6 +462,9 @@ function Rules.CanGraft(scion, host, level)
         if host.stage ~= 1 then return false, "Graft onto a growing crop, before it is ready to harvest" end
     elseif host.kind == "sapling" or host.kind == "tree" then
         if not host.planted then return false, "Only trees you planted will take a graft" end
+        if Rules.IsCrop(scion) and (quality or 1) < 2 then
+            return false, "Trees only take a prime cutting: from a watered, composted plot crop"
+        end
     else
         return false, "That cannot take a graft"
     end
@@ -336,7 +486,7 @@ end
 -- Can one more cutting go onto an existing hybrid? plants: its ordered list.
 -- The pair rules still hold against the host (a tree cutting never goes
 -- onto a crop), no plant appears twice, and the list stops at MaxPlants.
-function Rules.CanAddTo(plants, scion, host, level)
+function Rules.CanAddTo(plants, scion, host, level, quality)
     if #plants >= Rules.MaxPlants(level) then
         if Rules.MaxPlants(level) < 3 then return false, "A third graft is beyond Horticulture " .. Rules.MAX_LEVEL end
         return false, "It cannot take another graft"
@@ -344,7 +494,7 @@ function Rules.CanAddTo(plants, scion, host, level)
     for _, p in ipairs(plants) do
         if p == scion then return false, "It already carries " .. Rules.Name(scion):lower() end
     end
-    return Rules.CanGraft(scion, { species = plants[1], kind = host.kind, planted = host.planted, stage = host.stage, skills = host.skills }, level)
+    return Rules.CanGraft(scion, { species = plants[1], kind = host.kind, planted = host.planted, stage = host.stage, skills = host.skills }, level, quality)
 end
 
 -- Chance in percent that a graft takes. host.tier: plot tier (plots) or the

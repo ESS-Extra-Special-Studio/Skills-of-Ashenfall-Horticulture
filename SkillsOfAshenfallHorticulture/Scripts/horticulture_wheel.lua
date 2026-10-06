@@ -59,7 +59,9 @@ function Wheel.View(ctx)
     if g then v.inspect = { enabled = true } end
     if g and g.state == "hybrid" and g.kind ~= "plot" and not carrying then
         local ok, why = Core.CanPick(st, g)
-        v.pick = slice(ok, why, "Pick " .. Rules.HybridName(g.scion, g.host))
+        local label = "Pick " .. Rules.HybridName(g.scion, g.host)
+        if Rules.UsesVigour(g) and (g.vigour or 0) > 0 then label = string.format("%s (%d left)", label, g.vigour) end
+        v.pick = slice(ok, why, label)
     end
 
     local host = ctx.host

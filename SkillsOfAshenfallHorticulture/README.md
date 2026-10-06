@@ -45,11 +45,15 @@ Horticulture then appears in your skills menu and on the character select screen
 
 ## Splicing
 
-1. **Take a cutting.** Aim at a growing crop, a sapling or a tree and press **G**. The cutting goes into your satchel (six at most). One cutting per plant per day; a cutting wilts after two dawns.
+1. **Take a cutting.** Aim at a crop growing in one of your farm plots, a sapling or a tree and press **G**. The cutting goes into your satchel (six at most). Wild crops won't give one, nor will a crop sown today. One cutting per plant per day; a cutting wilts after two dawns.
 2. **Graft it.** Aim at a crop, sapling or tree **you planted** and press **G** again. Crop cuttings take on crops and on trees; tree cuttings take on trees, never on a crop. A plant cannot take a graft of its own kind, except cabbage, which the Brassicans thought worth trying.
+   - **Prime cuttings.** A tree only takes a *prime* crop cutting: one from a crop that is watered **and** composted, in a plot of at least its own tier (an ash plot for cabbage or potato, an oak plot for onion, tomato or dwellberry). A plot gives one prime cutting per crop cycle; the card says "PRIME CUTTING". A prime cutting, a watered plot and a composted plot also raise any graft's chance.
 3. **Wait for dawn.** At 06:00 in game (sleeping through it counts) the graft takes or is rejected. Your first graft always takes; after that the chance is about 60%, better the further you are above the cutting's level and worse when a crop is grafted onto a weaker host.
 4. **The hybrid.** A graft that takes changes the plant you can see, and the first of each pairing enters your **Discovery Catalogue**.
-5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G, or E at a grown tree). The fruit hangs at its natural size and sways with the branches. A hybrid crop adds the cutting's crop to its normal harvest. Felling a hybrid tree ends it, with a last handful.
+5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G, or E at a grown tree). The fruit hangs at its natural size and sways with the branches.
+   - **A crop on a tree** gives about one plot harvest of that crop a pick, never more than half a watered, composted plot's, and a little Farming XP (a quarter of what the plot harvest pays, at most 8). After four picks the scion rests: the tree goes **dormant** ("Tuberwood Ash (dormant)") until you graft another prime cutting of the same crop onto it, which wakes it at once for four more.
+   - **A crop on a crop** adds the cutting's crop to the plot's normal harvest, and the game's own compost and water bonuses apply to that extra when the plot is of the crop's tier: about 14 to 16 for a tended plot with a hybrid against 10 without. Farming XP is the game's, as for any harvest.
+   - **Felling** a hybrid tree ends it, with one pick's worth among the logs if it had a pick left that day (no XP for it).
 
 Tree cuttings need a logging axe in your hand that could fell that tree, as the game asks when you chop it: stone for ash, bronze for oak, iron for willow.
 
@@ -71,10 +75,10 @@ Splicing also asks for a vanilla level, set by the tier the game uses for that p
 
 | Hybrid | Graft | From | Gives |
 |--------|-------|-----:|-------|
-| Tuberwood Ash | Potato onto ash | 5 | 3 potatoes a day, from the branches |
-| Brassitato | Cabbage onto potato | 5 | 2 cabbages with the potato harvest |
-| Brassica-Oak | Cabbage onto oak | 8 | 3 cabbages a day, from the canopy |
-| Sheaf Ash | Wheat onto ash | 10 | 4 wheat a day |
+| Tuberwood Ash | Potato onto ash | 5 | 5 potatoes a pick, from the branches (four picks a prime cutting) |
+| Brassitato | Cabbage onto potato | 5 | 2 cabbages with the potato harvest; 4 in a watered, composted plot, 6 from a prime cutting |
+| Brassica-Oak | Cabbage onto oak | 8 | 5 cabbages a pick, from the canopy (four picks a prime cutting) |
+| Sheaf Ash | Wheat onto ash | 10 | 5 wheat a pick (four picks a prime cutting) |
 | Weeping Oak | Willow onto oak | 20 | willow and oak wood every day |
 
 Three more are waiting to be found, and every other pairing (all 150 that open by Horticulture 25) makes a hybrid of its own with a look and a catalogue line: crops nestle among the host crop's leaves, hang from a tree's branches, and a tree cutting grows as a limb of its host. Everything grows at its natural size.
@@ -100,6 +104,7 @@ Very rarely (1.5% of the time, `primelet_chance`), a cabbage grafted onto a cabb
 | A new flagship hybrid | +200 |
 | The Brassica Primelet: found / each stage / tended (once a day, until grown) | +200 once / 30 / 5 |
 | Pick from a hybrid tree (once a day) or harvest a hybrid crop | 25 |
+| Wake a dormant hybrid tree with a prime cutting | 15 |
 | Reading the Observances | 33, once |
 
 Ordinary farming still pays a little: sowing 10, watering 5, composting 10, weeding 3, curing 13, harvesting 23, and +17 / +33 for the first sowing and first harvest of each kind of crop. With eight plots and a few planted trees, level 25 takes four to six in-game days.
@@ -132,6 +137,15 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `primelet_chattiness` | `normal` | How often a Mini Brassica Prime speaks up on its own: `off`, `quiet`, `normal` or `chatty`. With `off` it only answers when you talk to it or tend it. |
 | `sway` | `true` | Fruit on hybrid trees sways with the game's wind, like the leaves (the nearest 12 within 30 m). `false` keeps it still. |
 | `sway_degrees` | `0.35` | How far that fruit leans at the game's normal wind, in degrees about the trunk base (0 to 3). |
+| `wild_cuttings` | `false` | `true` lets crop cuttings come from wild plants too. |
+| `vigour_picks` | `4` | Picks a crop on a tree gives before it goes dormant. |
+| `prime_cooldown_dawns` | `2` | Dawns before the same plot gives another prime cutting. |
+| `pick_per_farming_levels` | `10` | A tree pick adds one per this many Farming levels, still capped at half a tended plot's harvest. |
+| `pick_farming_xp` | `true` | Tree picks pay a little vanilla Farming XP. |
+| `pick_farming_xp_share` / `pick_farming_xp_cap` | `0.25` / `8` | That XP as a share of a plot harvest's, and its most per pick. |
+| `compost_multiplier` / `water_multiplier` | `1.5` / `1.15` | The bonuses a crop-on-crop hybrid's extra harvest gets from a composted and a watered plot (the game's own). |
+| `prime_share` | `1` | Extra produce a crop-on-crop hybrid from a prime cutting adds, before those bonuses. |
+| `farming_scale_cap` | `1.25` | Most a crop-on-crop hybrid's extra grows with Farming (1% a level above 25). |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |
 
 ### Action Wheel

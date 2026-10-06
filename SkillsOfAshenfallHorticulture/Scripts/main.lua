@@ -87,7 +87,8 @@ ESL.RegisterSkill({
     panelLabel = "Progress to next level",
     trainingText = "Aim at a plant and press " .. Settings.action_key .. " to take a cutting, then aim at a crop, sapling or tree you planted and press "
         .. Settings.action_key .. " to graft it. At dawn the graft takes or is rejected; a graft that takes becomes a hybrid, "
-        .. "and each new hybrid enters your Discovery Catalogue. Pick from hybrid trees once a day. Tree cuttings need an axe that can fell the tree, "
+        .. "and each new hybrid enters your Discovery Catalogue. Pick from hybrid trees once a day. Crop cuttings come from your farm plots; "
+        .. "a tree only takes a prime one, from a watered, composted crop in a plot of its tier, and rests after a few picks until the next. Tree cuttings need an axe that can fell the tree, "
         .. "and never take on a crop. Ordinary farming still pays a little.",
     requires = requires,
     perks = Perks.Rows(DEV),
@@ -113,7 +114,9 @@ local config = {
     nameTag = Settings.name_tag,
     mutationTint = Settings.mutation_tint,
     primeletChattiness = Settings.primelet_chattiness,
+    pickFarmingXp = Settings.pick_farming_xp,
 }
+require("horticulture_splice_rules").Configure(Settings)
 
 Book.Start(config)
 Training.Start(config)

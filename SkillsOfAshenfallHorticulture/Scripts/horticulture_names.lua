@@ -7,7 +7,7 @@
 -- Actors are keyed by full name; no engine object is kept.
 local Names = {}
 
-Names.MAX_WRITES = 3
+Names.MAX_WRITES = 5
 
 local named = {}
 

@@ -46,6 +46,35 @@ function Placement.Load(dir)
     return p
 end
 
+-- The ground's up vector from heights sampled r units either side of the
+-- spot along X (zxp, zxm) and Y (zyp, zym). Flat when a sample is missing.
+function Placement.Normal(zxp, zxm, zyp, zym, r)
+    if not (zxp and zxm and zyp and zym and r and r > 0) then return { X = 0, Y = 0, Z = 1 } end
+    local nx, ny = -(zxp - zxm) / (2 * r), -(zyp - zym) / (2 * r)
+    local len = math.sqrt(nx * nx + ny * ny + 1)
+    return { X = nx / len, Y = ny / len, Z = 1 / len }
+end
+
+-- A rotator (degrees) that lays the book on ground with up vector n, still
+-- facing yaw. Unreal axes: forward (CP CY, CP SY, SP); the right axis's Z is
+-- -SR CP and the up axis's Z is CR CP.
+function Placement.GroundRotation(n, yaw)
+    if n.Z < 1e-3 then return { Pitch = 0, Yaw = yaw or 0, Roll = 0 } end
+    -- Forward keeps the yaw's heading and climbs or drops with the ground.
+    local y = math.rad(yaw or 0)
+    local fx, fy = math.cos(y), math.sin(y)
+    local fz = -(n.X * fx + n.Y * fy) / n.Z
+    local len = math.sqrt(fx * fx + fy * fy + fz * fz)
+    fx, fy, fz = fx / len, fy / len, fz / len
+    -- right = up x forward
+    local rz = n.X * fy - n.Y * fx
+    return {
+        Pitch = math.deg(math.asin(math.max(-1, math.min(1, fz)))),
+        Yaw = math.deg(math.atan(fy, fx)),
+        Roll = math.deg(math.atan(-rz, n.Z)),
+    }
+end
+
 function Placement.Save(dir, p)
     local path = file_path(dir)
     local f = io.open(path .. ".tmp", "w")
