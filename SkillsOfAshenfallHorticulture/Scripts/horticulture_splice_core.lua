@@ -148,7 +148,7 @@ function Core.Dawn(st, level, rng, alive, opts)
                     st.firstTaken = true
                     local primeChance = opts.primeletChance or Rules.PRIMELET.chance
                     if Core.IsPrimeletGraft(g) and (opts.forcePrimelet or Primelet.Roll(rng, primeChance)) then
-                        local p = Primelet.New(st, (g.x or 0) + Core.PRIMELET_OFFSET, g.y or 0, g.z or 0, g.world)
+                        local p = Primelet.New(st, (g.x or 0) + Core.PRIMELET_OFFSET, g.y or 0, g.z or 0, g.world, rng)
                         outcomes[#outcomes + 1] = { graft = g, result = "primelet", chance = chance, primelet = p }
                     else
                         g.state = "hybrid"

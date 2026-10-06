@@ -26,11 +26,11 @@ Placements.THIN_FIRST = { "ground_fruit", "canopy_stem" }
 Placements.SKIP_GROUPS = { "ground", "fallen" }
 
 -- Fruit (the game's item meshes, or a "fruit" group) is never drawn above
--- this scale: anything larger reads as giant next to the real crop.
-Placements.FRUIT_MAX = 1.1
--- Per mesh: SM_Wheat_01 is a whole 1.4 m wheat plant, so a natural sheaf is
--- about half scale.
-Placements.FRUIT_MAX_MESH = { SM_Wheat_ = 0.6 }
+-- natural size: anything larger reads as giant next to the real crop.
+Placements.FRUIT_MAX = 1.0
+-- Per mesh: SM_Wheat_01 and SM_Flax_01 are whole plants over a metre tall,
+-- so a natural sheaf or bundle is about half scale.
+Placements.FRUIT_MAX_MESH = { SM_Wheat_ = 0.55, SM_Flax_ = 0.55 }
 
 function Placements.FruitMax(mesh)
     for part, max in pairs(Placements.FRUIT_MAX_MESH) do
@@ -144,7 +144,9 @@ function Placements.Pieces(shape, opts)
     end
     local out = {}
     for _, a in ipairs(list) do
-        local l, r, s = a.location or {}, a.rotation or {}, a.scale or {}
+        -- Without the pak there is no stalk: the fruit sits against the bark.
+        local l = (not opts.havePak and a.no_pak_location) or a.location or {}
+        local r, s = a.rotation or {}, a.scale or {}
         local sx, sy, sz = s[1] or 1, s[2] or s[1] or 1, s[3] or s[1] or 1
         if Placements.IsFruit(a.group, a.mesh) then sx, sy, sz = Placements.ClampFruit(sx, sy, sz, a.mesh) end
         out[#out + 1] = {

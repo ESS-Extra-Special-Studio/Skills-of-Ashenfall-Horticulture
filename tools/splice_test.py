@@ -370,16 +370,19 @@ check("only cabbage on cabbage can become a primelet", prime[3] == "brassitato t
 check("tend once a day", prime[4] == "tend true" and prime[5] == "again false after dawn", prime[4:6])
 check("a tended day grows it", prime[6] == "day1 1 1 0", prime[6])
 check("an untended day does not", prime[7] == "untended 1 1", prime[7])
-check("two tended days: Brassica Primelet", prime[8] == "day2 2 2 1 Brassica Primelet", prime[8])
-check("five tended days: Prime-ling", prime[9] == "grown 5 3 Prime-ling", prime[9])
-check("Prime-ling is the last stage", prime[10] == "cap 3", prime[10])
+check("two tended days: Brassica Primelet, now known by its full name", prime[8].startswith("day2 2 2 1 ") and " the " in prime[8], prime[8])
+check("five tended days: Mini Brassica Prime", prime[9].startswith("grown 5 3 ") and " the " in prime[9], prime[9])
+check("Mini Brassica Prime is the last stage", prime[10] == "cap 3", prime[10])
+check("stage names: Sprout, Brassica Primelet, Mini Brassica Prime",
+      L.eval('(function() local P = require("horticulture_primelet") return P.STAGES[1].name .. "|" .. P.STAGES[2].name .. "|" .. P.STAGES[3].name end)()')
+      == "Primelet Sprout|Brassica Primelet|Mini Brassica Prime")
 check("near: facing it, not turned away, not in another world", prime[11] == "near true false true", prime[11])
 check("no cutting from a primelet", prime[12] == "cut nil", prime[12])
 check("picked up into the satchel", prime[13].startswith("carried true 0 p"), prime[13])
 check("a carried primelet never wilts", prime[14].startswith("kept 1 p"), prime[14])
 check("a carried primelet is not grafted", "Set the Primelet down" in prime[15], prime[15])
 check("set down in another world", prime[16] == "placed 0 false Other 0 1", prime[16])
-check("status line", prime[17].startswith("status Prime-ling (fully grown, at home"), prime[17])
+check("status line", prime[17].startswith("status ") and ", Mini Brassica Prime (fully grown, at home" in prime[17], prime[17])
 
 # World helpers -------------------------------------------------------------
 W = L.eval('(require("horticulture_world"))')
@@ -472,7 +475,7 @@ end""")()
 check("layouts for the flagships", all(s in lay for s in ["TuberwoodAsh=12", "BrassicaOak=10", "SheafAsh=12", "WeepingOak=2", "BambleNone=4"]) and "!" not in lay, lay)
 check("Brassitato crowns the potato with a cabbage", "Brassitato=1:cabbage" in lay, lay)
 check("built-in Tuberwood potatoes hang in the canopy", "tuberhigh=true" in lay, lay)
-check("built-in layouts clamp fruit to 1.1", "fruitmax=1.10" in lay, lay)
+check("built-in layouts keep fruit at natural size (1.0)", "fruitmax=1.00" in lay, lay)
 check("meshes.txt overrides", "/Game/Mods/X/SM_T.SM_T /Game/A/B.B" in lay, lay)
 att = L.eval(r"""function()
     local Looks = require("horticulture_looks")
@@ -504,7 +507,7 @@ check("attachment file: full path, per-axis scale, path only", att[1] == "/Game/
 check("attachments scale with the host actor", att[2] == "240 1220 3.6 6", att[2])
 check("a triple hybrid wears both layouts (Tuberwood 12 + Sheaf 12)", att[3] == "triple=24", att[3])
 check("primelet look: tinted cabbage and a crown of 5 gold ingots", att[4] == "primelet=6 cabbage true ingots 5 bad 0", att[4])
-check("packaged Tuberwood path", "/Game/Mods/SkillsOfAshenfallHorticulture/Art/Plants/TuberwoodAsh/SM_TuberwoodAsh_Additions_01.SM_TuberwoodAsh_Additions_01" in lay, lay)
+check("no whole-hybrid cooked meshes are assumed (meshes.txt can still name one)", lay.endswith("/Game/A/B.B"), lay)
 
 # Pipeline placement data ---------------------------------------------------
 pl = L.eval(r"""function(scripts)
@@ -582,8 +585,10 @@ end""")(SCRIPTS).split("\n")
 for line, want in zip(pl[:5], ["TuberwoodAsh=9 hosts 0 bad 0", "BrassicaOak=6 hosts 0 bad 0", "SheafAsh=9 hosts 0 bad 0",
                                "Brassitato=3 hosts 0 bad 0", "WeepingOak=6 hosts 0 bad 0"]):
     check("placement data: " + want.split("=")[0] + " covers every host with vanilla meshes only", line.startswith(want) and line.endswith(" 0 nonvanilla"), line)
-check("host picked by mesh path; stalks need the pak; cap respected", pl[8].startswith("tub SM_FH_Ash_Tree_02 shape_1 all 148 free 106 capped 40 ground 0"), pl[8])
-check("loader safety net: ground fruit skipped, giant fruit clamped (2.8 -> 1.1), natural wheat untouched, oversized wheat to 0.6, stems unclamped", pl[6] == "safety 4 1.10 0.50/0.55 0.60 1.60", pl[6])
+tub = pl[8].split()
+check("host picked by mesh path; stalks need the pak; cap respected",
+      pl[8].startswith("tub SM_FH_Ash_Tree_02 shape_1 all ") and int(tub[4]) > int(tub[6]) > 40 and tub[8] == "40" and tub[10] == "0", pl[8])
+check("loader safety net: ground fruit skipped, giant fruit to natural size (2.8 -> 1.0), natural wheat untouched, oversized wheat to 0.55, stems unclamped", pl[6] == "safety 4 1.00 0.50/0.55 0.55 1.60", pl[6])
 check("Sheaf Ash v003 wheat (0.45-0.55, a whole plant mesh) passes the clamp unchanged", pl[7].endswith(" true") and pl[7].startswith("wheat 0.4"), pl[7])
 check("ground/fallen fruit groups are never placed; fruit scale clamped to 1.1", pl[5].startswith("fruit 0 1.0") and pl[5].endswith(" true false"), pl[5])
 check("Tuberwood potatoes hang in the canopy (most above 6 m)", int(pl[8].split("high ")[1]) >= 40, pl[8])
@@ -651,7 +656,7 @@ mo = L.eval(r"""function(scripts, vdir)
     out[#out + 1] = "broken " .. tostring(ok)
     return table.concat(out, "\n")
 end""")(SCRIPTS, vdir).split("\n")
-check("newest shipped versions are used (Brassitato stays v001)", mo[0] == "files v008 v003 v003 v001 v002", mo[0])
+check("newest shipped versions are used (Tuberwood v013, Brassica-Oak v005, Sheaf v004, Brassitato v003, Weeping v003)", mo[0] == "files v013 v005 v004 v003 v003", mo[0])
 check("loader takes the newest file that loads (a broken newer one is skipped)", mo[1] == "pick new nil", mo[1])
 check("instanced cap keeps every pak-free Tuberwood piece on all three shapes", mo[2] == "ismcap 3", mo[2])
 check("Weeping Oak overrides reach the pieces (one instanced component per tree)", mo[3].startswith("willow 2 piece(s) 1 key(s) slot 0 Color_Mult_A 1.15 1.45 0.20 1 scalars Color_Mult_Blend=1.00 Subsurface Amount scale=0.35 none=''"), mo[3])
@@ -687,7 +692,10 @@ local Looks = require("horticulture_looks")
 Looks.Init = function() end
 Looks.Apply = function(g, h, mode, id) applied[#applied + 1] = g.id .. ":" .. mode .. ":" .. id return 3 end
 Looks.Clear = function(id) cleared[#cleared + 1] = id end
-Looks.ApplyPrimelet = function(id, loc, yaw, scale) applied[#applied + 1] = id .. ":" .. string.format("%.0f,%.0f,%.2f", loc.X, loc.Y, scale) return 6 end
+Looks.ApplyPrimelet = function(id, loc, yaw, stage, personality, potted)
+    applied[#applied + 1] = id .. ":" .. string.format("%.0f,%.0f,%s,%s,%s", loc.X, loc.Y, stage, tostring(personality), potted and "pot" or "nopot")
+    return 6, 50
+end
 Looks.ClearAll = function() end
 local paid, order = {}, {}
 ESL = {
@@ -897,7 +905,8 @@ check("Primelet reveal cards in order", c.find("SOMETHING HAS HAPPENED|BRASSICA 
 titles = [card.split("|")[1] for card in c.split(" ; ") if card.count("|") >= 2]
 check("reveal card titles fit on one line", titles and max(len(t) for t in titles) <= 40, titles)
 ap = g.take("applied")
-check("Primelet drawn beside the plot", "prime:p" in ap and ":140,0,0.80" in ap, ap)
+check("Primelet drawn beside the plot, as a sprout with a personality, no pot", "prime:p" in ap and ":140,0,sprout," in ap
+      and ",nil," not in ap and ap.endswith("nopot"), ap)
 check("catalogue lists the secret entry once found", "Brassica Primelet (secret)" in g.S.CatalogueLine(), g.S.CatalogueLine())
 g.aimed = None
 g.press("G")
@@ -915,7 +924,7 @@ g.press("G")
 c = g.take("cards")
 check("G sets it down", "SET DOWN|Primelet Sprout|" in c, c)
 ap = g.take("applied")
-check("set down in front of the player", ":120,0,0.80" in ap, ap)
+check("set down in front of the player", ":120,0,sprout," in ap, ap)
 L2 = fresh()
 L2.execute(GLUE, SCRIPTS, TMP)
 pl = L2.eval('(function() local st = require("horticulture_splicing").State() return #st.primelets .. " " .. tostring(st.primelets[1].carried) .. " " .. st.primelets[1].x end)()')
@@ -936,7 +945,7 @@ for _ in range(6):
     g.tick()
 check("seeded graft becomes a Primelet ahead of the player", "hybrid:BrassicaPrimelet=200" in g.take("awards"))
 ap = g.take("applied")
-check("seeded Primelet two metres ahead", "prime:p" in ap and ":200,0," in ap, ap)
+check("seeded Primelet two metres ahead", "prime:p" in ap and ":200,0,sprout," in ap, ap)
 
 # Action Wheel (optional companion) ----------------------------------------
 WHEEL = r"""
@@ -1209,19 +1218,22 @@ g.levelUp = True
 g.S.Dawn("test")
 g.step(0.5)
 c = g.take("cards")
-check("reveal hold: the ordinary dawn card shows at once", "GRAFT TOOK|" in c and "DISCOVERED" not in c, c)
+check("banner hold: after a level-up even the ordinary dawn card waits for the banner", c == "", c)
 g.step(2)
 c = g.take("cards")
-check("reveal hold: discovery waits for the banner to appear after a level-up", "DISCOVERED" not in c, c)
+check("reveal hold: discovery waits for the banner to appear after a level-up", "DISCOVERED" not in c and "GRAFT TOOK" not in c, c)
 g.bannerOn = True
 for _ in range(10):
     g.step(1)
 c = g.take("cards")
-check("reveal hold: discovery waits while the level-up banner is on screen", "DISCOVERED" not in c, c)
+check("banner hold: no card while the level-up banner is on screen", c == "", c)
 g.bannerOn = False
 g.step(0.5)
-check("reveal hold: a moment's grace after the banner goes", "DISCOVERED" not in g.take("cards"))
+check("banner hold: a moment's grace after the banner goes", g.take("cards") == "")
 g.step(1)
+c = g.take("cards")
+check("banner hold: then the dawn card", "GRAFT TOOK|" in c and "DISCOVERED" not in c, c)
+g.step(10)
 c = g.take("cards")
 check("reveal hold: then the discovery shows", "DISCOVERY CATALOGUE|TUBERWOOD ASH DISCOVERED|" in c, c)
 g.step(10)
@@ -1233,6 +1245,331 @@ L.execute('S.Dawn("test")')
 for _ in range(30):
     g.step(1)
 check("reveal hold: never held longer than 25 s (a banner that never goes)", True)
+
+# Vanilla skill gates -------------------------------------------------------
+L = fresh()
+T = L.table_from
+cancut = L.eval("function(t) local ok, why = require('horticulture_splice_rules').CanCut(t) return tostring(ok) .. '|' .. tostring(why) end")
+cangraft = L.eval("function(s, h, lv) local ok, why = require('horticulture_splice_rules').CanGraft(s, h, lv) return tostring(ok) .. '|' .. tostring(why) end")
+r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1, "skills": T({"Farming": 19})}))
+check("gate: an ash cutting needs Tree Farming (Farming 20)", r == "false|Needs Farming 20", r)
+r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1, "skills": T({"Farming": 20})}))
+check("gate: Farming 20 takes the ash cutting", r.startswith("true"), r)
+r = cancut(T({"species": "Oak", "kind": "tree", "level": 8, "axePower": 1, "skills": T({"Farming": 30})}))
+check("gate: the axe tier still applies after the Farming gate", r.startswith("false") and "too weak" in r, r)
+r = cancut(T({"species": "FPD_Potato", "kind": "crop", "level": 5, "alive": True, "skills": T({"Farming": 0})}))
+check("gate: crops need Farming 1 (Growing Pains)", r == "false|Needs Farming 1", r)
+r = cancut(T({"species": "FPD_Potato", "kind": "crop", "level": 5, "alive": True, "skills": T({"Farming": 1})}))
+check("gate: Farming 1 takes a potato cutting", r.startswith("true"), r)
+r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1, "skills": T({})}))
+check("gate: an unreadable Farming level never blocks", r.startswith("true"), r)
+r = cancut(T({"species": "Ash", "kind": "tree", "level": 1, "axePower": 1}))
+check("gate: no skills given never blocks", r.startswith("true"), r)
+r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 19})}), 1)
+check("gate: grafting onto an ash host needs Farming 20", r == "false|Needs Farming 20 for ash", r)
+r = cangraft("Oak", T({"species": "Ash", "kind": "tree", "planted": True, "skills": T({"Farming": 19})}), 8)
+check("gate: a tree cutting as the donor needs Farming 20", r == "false|Needs Farming 20 for oak", r)
+r = cangraft("FPD_Cabbage", T({"species": "FPD_Potato", "kind": "plot", "planted": True, "stage": 1, "skills": T({"Farming": 0})}), 5)
+check("gate: crop donor and crop host both checked", r.startswith("false|Needs Farming 1"), r)
+r = cangraft("FPD_Potato", T({"species": "Ash", "kind": "sapling", "planted": True, "skills": T({"Farming": 20})}), 1)
+check("gate: Farming 20 grafts potato onto ash", r.startswith("true"), r)
+W2 = L.eval('(require("horticulture_wheel"))')
+check("wheel: 'Needs Farming 20' is greyed as a level lock", W2.LevelLocked("Needs Farming 20 for ash") is True and W2.LevelLocked("Needs Woodcutting 20") is True
+      and W2.LevelLocked("Your axe is too weak") is False)
+
+# All 150 Horticulture 1-25 combinations: generic looks -----------------------
+gen = L.eval(r"""function(scripts)
+    local G = require("horticulture_hybrid_generic")
+    local P = require("horticulture_placements")
+    local Rules = require("horticulture_splice_rules")
+    local out = {}
+    if not G.Load(scripts .. "\\placements") then return "load failed" end
+    local combos = dofile(scripts .. "\\placements\\hort_plant_generic_hybrids_1_25_combos_v003.lua").combos
+    local n, missing, empty, big, bigPak, nestOnTree, leafy, illegal, nopakMoved = 0, {}, {}, 0, 0, 0, 0, 0, 0
+    for _, e in ipairs(combos) do
+        n = n + 1
+        local scion, host = e.key:match("^(.-)>(.+)$")
+        local d = G.Placement(scion, host)
+        if not d then missing[#missing + 1] = e.key else
+            local shapes, pieces = 0, 0
+            for mesh, sid in pairs(d.hosts) do
+                local shape = d.shapes[sid]
+                shapes = shapes + 1
+                for _, a in ipairs(shape.attachments) do
+                    if Rules.IsTree(host) and not Rules.IsTree(scion) and a.name:find("^nestle") then nestOnTree = nestOnTree + 1 end
+                    if a.no_pak_location then
+                        local dx = a.no_pak_location[1] - a.location[1]
+                        local dy = a.no_pak_location[2] - a.location[2]
+                        local dz = a.no_pak_location[3] - a.location[3]
+                        if dx * dx + dy * dy + dz * dz > 1 then nopakMoved = nopakMoved + 1 end
+                    end
+                end
+                local free = P.Pieces(shape, { havePak = false })
+                pieces = pieces + #free
+                for _, p in ipairs(free) do
+                    if math.max(p.scale or 1, p.scaleY or 0, p.scaleZ or 0) > 1.0001 then big = big + 1 end
+                end
+                for _, p in ipairs(P.Pieces(shape, { havePak = true })) do
+                    if P.IsFruit(p.group, p.path) and math.max(p.scale or 1, p.scaleY or 0, p.scaleZ or 0) > 1.0001 then bigPak = bigPak + 1 end
+                end
+            end
+            if pieces == 0 then empty[#empty + 1] = e.key end
+            local ok = Rules.CanGraft(scion, { species = host, kind = Rules.IsTree(host) and "tree" or "plot", planted = true, stage = 1 }, 25)
+            if not ok then illegal = illegal + 1 end
+        end
+    end
+    return string.format("n %d missing %d empty %d big %d bigpak %d nestontree %d illegal %d nopak %d %s %s", n, #missing, #empty, big, bigPak,
+        nestOnTree, illegal, nopakMoved, table.concat(missing, ","), table.concat(empty, ","))
+end""")(SCRIPTS)
+check("generic: the combos file lists all 150 level 1-25 combinations", gen.startswith("n 150 "), gen)
+check("generic: every combination has a look on every host mesh it can show", " missing 0 empty 0 " in gen, gen)
+check("generic: nothing above natural size, with or without the pak (no giant anything)", " big 0 bigpak 0 " in gen, gen)
+check("generic: crops on trees hang from branches (never nestled in the leaves)", " nestontree 0 " in gen, gen)
+check("generic: every listed combination is one the rules allow at 25", " illegal 0 " in gen, gen)
+check("generic: without the stalk mesh the fruit moves to the bark", int(gen.split(" nopak ")[1].split()[0]) > 0, gen)
+fb = L.eval(r"""function()
+    local P = require("horticulture_placements")
+    local shape = { attachments = {
+        { mesh = "/Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01", group = "canopy_fruit", location = { 100, 0, 500 },
+          no_pak_location = { 60, 0, 480 }, rotation = { 0, 0, 0 }, scale = { 1, 1, 1 } } } }
+    local a = P.Pieces(shape, { havePak = true })[1]
+    local b = P.Pieces(shape, { havePak = false })[1]
+    return string.format("%.0f,%.0f %.0f,%.0f", a.x, a.z, b.x, b.z)
+end""")()
+check("no-pak fallback: the bark-contact position replaces the stalk-tip one", fb == "100,500 60,480", fb)
+
+# Primelet voice --------------------------------------------------------------
+voice = L.eval(r"""function()
+    local Talk = require("horticulture_primelet_talk")
+    local V = Talk.V
+    local out = {}
+    local seq = {}
+    local function fixed(list) local i = 0 return function(n) i = i + 1 local v = list[(i - 1) % #list + 1] return math.min(n, math.max(1, v)) end end
+    math.randomseed(25)
+    local counts, owned = {}, {}
+    for i = 1, 6000 do
+        local k = Talk.RollPersonality(owned, function(n) return math.random(n) end)
+        counts[k] = (counts[k] or 0) + 1
+    end
+    out[#out + 1] = string.format("unhinged %.3f pompous %.3f", counts.unhinged / 6000, counts.pompous / 6000)
+    local damp = {}
+    for i = 1, 6000 do
+        local k = Talk.RollPersonality({ pompous = 3 }, function(n) return math.random(n) end)
+        damp[k] = (damp[k] or 0) + 1
+    end
+    out[#out + 1] = string.format("damped %.3f", damp.pompous / 6000)
+    local used = {}
+    for _, n in ipairs(V.P.grumpy.names) do used[n] = true end
+    out[#out + 1] = "second " .. Talk.RollName("grumpy", used, fixed({ 1 }))
+    out[#out + 1] = "fresh " .. tostring(Talk.RollName("grumpy", { ["Old Stalk"] = true }, fixed({ 1 })) ~= "Old Stalk")
+    local m = { id = "p1", stage = 1, personality = "pompous", name = "Lord Savoy", said = {} }
+    out[#out + 1] = "sproutname " .. tostring(Talk.FullName(m))
+    m.stage = 2
+    out[#out + 1] = "fullname " .. tostring(Talk.FullName(m))
+    local e = Talk.New({ rng = function(n) return math.random(n) end, clock = function() return 0 end })
+    m.stage = 1
+    local t1, n1 = e:Line(m, "talk", {})
+    local inSprout = false
+    for _, s in ipairs(V.SHARED.sprout) do if s == t1 then inSprout = true end end
+    out[#out + 1] = "sprout " .. tostring(n1) .. " " .. tostring(inSprout) .. " " .. tostring(e:Line(m, "potted", {}) == nil)
+    m.stage = 3
+    local t3, n3 = e:Line(m, "talk", { level = 12 })
+    out[#out + 1] = "mini " .. tostring(n3) .. " " .. tostring(t3 ~= nil)
+    local seen, dup = {}, 0
+    for i = 1, 10 do
+        local text, line = e:Pick(m, V.P.pompous.talk, {})
+        if seen[text] then dup = dup + 1 end
+        seen[text] = true
+        e:Remember(m, text, line)
+    end
+    out[#out + 1] = "norepeat " .. dup
+    local f1, _, _, l1 = e:Line(m, "first_words", {})
+    e:Remember(m, f1, l1)
+    local f2, _, _, l2 = e:Line(m, "first_words", {})
+    e:Remember(m, f2, l2)
+    local f3 = e:Line(m, "first_words", {})
+    out[#out + 1] = "once " .. tostring(f1 ~= f2) .. " " .. tostring(f3 == nil) .. " " .. tostring(next(m.said) ~= nil)
+    -- cooldowns
+    local clock = 0
+    local c = Talk.New({ rng = function(n) return 1 end, clock = function() return clock end })
+    local a, b = { id = "a" }, { id = "b" }
+    c:Spoke(a, "Hello there.", nil, 0)
+    local r = {}
+    for _, t in ipairs({ 2, 10, 31, 151 }) do
+        r[#r + 1] = string.format("%s/%s/%s", tostring(c:CanSpeak("b", "ambient", t)), tostring(c:CanSpeak("a", "ambient", t)), tostring(c:CanSpeak("b", "talk", t)))
+    end
+    out[#out + 1] = "gaps " .. table.concat(r, " ")
+    c:SetChattiness("off")
+    out[#out + 1] = "off " .. tostring(c:CanSpeak("b", "ambient", 1000)) .. " " .. tostring(c:CanSpeak("b", "potted", 1000)) .. " " .. tostring(c:CanSpeak("b", "talk", 1000))
+    out[#out + 1] = string.format("bubble %.2f %.2f", Talk.BubbleSeconds("0123456789"), Talk.BubbleSeconds(string.rep("x", 200)))
+    -- arrangement
+    local function ring(n, r, step, skip)
+        local pts = {}
+        for i = 0, n - 1 do
+            local ang = math.rad(i * (step or 72) + ((skip and i == 1) and 25 or 0))
+            pts[#pts + 1] = { x = 1000 + r * math.cos(ang), y = 500 + r * math.sin(ang), z = 0, id = i }
+        end
+        return pts
+    end
+    local five = ring(5, 250)
+    local found = Talk.Arrangement(five)
+    out[#out + 1] = "five " .. tostring(found ~= nil) .. string.format(" %.0f", found and found.r or 0)
+    local bent = ring(5, 250, 72, true)
+    local f2b, nearly = Talk.Arrangement(bent)
+    out[#out + 1] = "bent " .. tostring(f2b ~= nil) .. " " .. tostring(nearly)
+    local crowded = ring(5, 250)
+    crowded[#crowded + 1] = { x = 1000, y = 500, z = 0, id = 9 }
+    out[#out + 1] = "crowded " .. tostring(Talk.Arrangement(crowded) ~= nil)
+    local small = ring(5, 80)
+    out[#out + 1] = "small " .. tostring(Talk.Arrangement(small) ~= nil)
+    local stairs = ring(5, 250)
+    stairs[3].z = 200
+    out[#out + 1] = "stairs " .. tostring(Talk.Arrangement(stairs) ~= nil)
+    local three = { five[1], five[2], five[3] }
+    local four = { five[1], five[2], five[3], five[4] }
+    out[#out + 1] = string.format("progress %d %d %d %d", Talk.Progress({ five[1], five[2] }), Talk.Progress(three), Talk.Progress(four), Talk.Progress(five))
+    out[#out + 1] = "pools " .. tostring(Talk.ProgressPool(3, 4, false)) .. " " .. tostring(Talk.ProgressPool(4, 3, false)) .. " " .. tostring(Talk.ProgressPool(4, 4, true))
+    local d = Talk.New({ rng = function(n) return n end, clock = function() return 0 end })
+    local s1, s2 = { id = "s1", stage = 3, personality = "grumpy", name = "Gristle", said = {} }, { id = "s2", stage = 3, personality = "pompous", name = "Lord Savoy", said = {} }
+    local first = d:Completed(s1, s2, {}, false)
+    local later = d:Completed(s1, s2, {}, true)
+    out[#out + 1] = "first " .. tostring(first == V.SHARED.ring_first) .. " " .. tostring(later ~= nil)
+    local fa, fb2, la = d:Bicker(s1, s2, {})
+    out[#out + 1] = "bicker " .. tostring(fa and fa.personality) .. " " .. tostring(la ~= nil)
+    out[#out + 1] = "fill " .. Talk.Fill("{name} and {other}: {minis}", s1, { other = "Lord Savoy", minis = 3 })
+    out[#out + 1] = "tier " .. Talk.HintTier(2) .. Talk.HintTier(3) .. Talk.HintTier(4) .. Talk.HintTier(9)
+    out[#out + 1] = "ignored " .. tostring(Talk.IgnoredTier(s1, 1)) .. " " .. tostring(Talk.IgnoredTier(s1, 5))
+    return table.concat(out, "\n")
+end""")().split("\n")
+un, po = float(voice[0].split()[1]), float(voice[0].split()[3])
+check("personality roll follows the weights (unhinged ~7%, pompous ~20%)", 0.05 < un < 0.09 and 0.17 < po < 0.23, voice[0])
+check("owning three Pompous makes a fourth rarer", float(voice[1].split()[1]) < 0.05, voice[1])
+check("names: all taken gives 'the Second'", voice[2].startswith("second ") and voice[2].endswith(" the Second"), voice[2])
+check("names: a used name is skipped", voice[3] == "fresh true", voice[3])
+check("a Sprout has no full name yet", voice[4] == "sproutname nil", voice[4])
+check("full name from the Brassica Primelet stage", voice[5] == "fullname Lord Savoy the Pompous", voice[5])
+check("a Sprout is narrated, from the shared sprout lines, and never speaks for events", voice[6] == "sprout true true true", voice[6])
+check("a Mini Brassica Prime speaks", voice[7] == "mini false true", voice[7])
+check("a Mini does not repeat its recent lines", voice[8] == "norepeat 0", voice[8])
+check("first words: once lines are said once, and saved", voice[9] == "once true true true", voice[9])
+check("cooldowns: bubble, 30 s global, 150 s per Mini; talk only waits 4 s", voice[10] == "gaps false/false/false false/false/true true/false/true true/true/true", voice[10])
+check("chattiness off: only talk and tend replies", voice[11] == "off false false true", voice[11])
+check("bubble time 3 s + 0.055 s a character, 3-8 s", voice[12] == "bubble 3.55 8.00", voice[12])
+check("arrangement: five evenly round a 2.5 m centre fit", voice[13] == "five true 250", voice[13])
+check("arrangement: one out of step does not fit, but nearly", voice[14] == "bent false true", voice[14])
+check("arrangement: a sixth in the middle spoils it", voice[15] == "crowded false", voice[15])
+check("arrangement: too small does not count", voice[16] == "small false", voice[16])
+check("arrangement: not on one floor does not count", voice[17] == "stairs false", voice[17])
+check("progress 0, 3, 4, 5", voice[18] == "progress 0 3 4 5", voice[18])
+check("progress lines: closer, colder, nearly", voice[19] == "pools closer colder nearly", voice[19])
+check("the first completion says the shared first line; later ones vary", voice[20] == "first true true", voice[20])
+check("bickering: the pair's first speaker leads", voice[21] == "bicker pompous true", voice[21])
+check("tokens filled", voice[22] == "fill Gristle and Lord Savoy: 3", voice[22])
+check("hint tiers at 3, 4 and 5 grown Minis", voice[23] == "tier 0123", voice[23])
+check("ignored lines by days", voice[24] == "ignored nil 4", voice[24])
+
+store = L.eval(r"""function()
+    local Store = require("horticulture_splice_store")
+    local P = require("horticulture_primelet")
+    local st = Store.New()
+    st.pmflag1, st.lastSeen = true, 1790000000
+    local p = P.New(st, 1, 2, 3, "W", function(n) return 1 end)
+    p.stage, p.potted, p.talked, p.ign, p.seen = 3, true, 4, 2, 5
+    p.said = { abcd1234 = true, ["0000beef"] = true }
+    local back = Store.Parse(Store.Serialize(st))
+    local q = back.primelets[1]
+    local keys = {}
+    for k in pairs(q.said) do keys[#keys + 1] = k end
+    table.sort(keys)
+    local out = { string.format("%s|%s|%s|%s|%d|%d|%d|%s|%s|%s", q.personality, q.name, tostring(q.potted), tostring(q.carried), q.talked, q.ign, q.seen,
+        table.concat(keys, ","), tostring(back.pmflag1), tostring(back.lastSeen)) }
+    local text = Store.Serialize(st)
+    out[#out + 1] = "neutral " .. tostring(not text:lower():find("ring") and not text:lower():find("summon"))
+    local old = Store.Parse("version=2\ndawn=3\nnextid=5\nprimelet=p1|3|5|2|0|W|10|20|30|0|0\nprimelet=p2|1|0|-1|1|W|1|1|1|0|0\n")
+    out[#out + 1] = string.format("old %d %s %s", #old.primelets, tostring(old.primelets[1].personality), tostring(old.primelets[1].potted))
+    local n = P.Migrate(old, function(k) return 1 end)
+    out[#out + 1] = string.format("migrated %d %s %s %s", n, tostring(old.primelets[1].personality ~= nil), tostring(old.primelets[1].name ~= old.primelets[2].name),
+        P.Name(old.primelets[1]):match(" the %a+$") and "named" or P.Name(old.primelets[1]))
+    out[#out + 1] = "again " .. P.Migrate(old, function(k) return 1 end)
+    local g = Store.New()
+    local m = P.New(g, 0, 0, 0, "W", function(k) return 1 end)
+    m.stage = 3
+    local entry = P.PickUp(g, m, 6)
+    local _, _, pot1 = P.Place(g, entry, 1, 1, 1, 0, "W")
+    entry = P.PickUp(g, m, 6)
+    local _, _, pot2 = P.Place(g, entry, 2, 2, 2, 0, "W")
+    local y = Store.New()
+    local young = P.New(y, 0, 0, 0, "W", function(k) return 1 end)
+    local e2 = P.PickUp(y, young, 6)
+    local _, _, pot3 = P.Place(y, e2, 1, 1, 1, 0, "W")
+    out[#out + 1] = string.format("pot %s %s %s %s", tostring(pot1), tostring(pot2), tostring(m.potted), tostring(pot3))
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("save keeps personality, name, pot, talked, ignored tier, seen, said lines, and the file flags",
+      store[0] == "pompous|Lord Savoy|true|false|4|2|5|0000beef,abcd1234|true|1790000000", store[0])
+check("save keys are neutral", store[1] == "neutral true", store[1])
+check("older save rows still load", store[2] == "old 2 nil false", store[2])
+check("migration rolls a personality and a different name for each", store[3] == "migrated 2 true true named", store[3])
+check("migration runs once", store[4] == "again 0", store[4])
+check("potting: a grown Mini takes a pot the first time it is set down, once; a younger one does not", store[5] == "pot true false true false", store[5])
+
+looks = L.eval(r"""function(scripts)
+    local PL = require("horticulture_primelet_looks")
+    PL.Load(scripts .. "\\placements")
+    local Looks = require("horticulture_looks")
+    local function summary(stage, pers, potted)
+        local pieces, z = Looks.PrimeletPieces(stage, pers, potted)
+        local pot, face, minz = 0, 0, math.huge
+        for _, p in ipairs(pieces) do
+            if p.group == "pot" or p.name == "pot" then pot = pot + 1 end
+            if (p.path or ""):find("SM_PRM_Face", 1, true) then face = face + 1 end
+            minz = math.min(minz, p.z or 0)
+        end
+        return string.format("%d pot %d face %d z %.0f", #pieces, pot, face, z)
+    end
+    local lift = PL.Stage("primeling").lift_cm
+    return table.concat({ PL.File(), summary("sprout", "grumpy", false), summary("primeling", "grumpy", true), summary("primeling", "grumpy", false),
+        string.format("%.2f", lift) }, "\n")
+end""")(SCRIPTS).split("\n")
+check("Primelet looks from the pipeline data file", looks[0] == "hort_plant_brassica_primelet_v001", looks[0])
+check("a sprout has no pot; without the pak no face pieces", " pot 0 face 0 " in looks[1], looks[1])
+check("a potted Mini stands in its pot; bubble above it", " pot 0 " not in looks[2] and looks[2].endswith("z 85"), looks[2])
+ppot = int(looks[2].split()[0]) - int(looks[3].split()[0])
+check("an unpotted Mini drops the pot and sits lower by the pot's lift", ppot > 0 and " pot 0 " in looks[3] and looks[3].endswith("z 64"), looks[2:4])
+
+cfgt = L.eval(r"""function(tmp)
+    local C = require("horticulture_config")
+    local function load(text)
+        local dir = tmp .. "\\cfg" .. tostring(math.random(100000))
+        os.execute('mkdir "' .. dir .. '\\Scripts" 2>nul')
+        local f = io.open(dir .. "\\config.txt", "w") f:write(text) f:close()
+        return C.Load(dir .. "\\Scripts", function() end).primelet_chattiness
+    end
+    return load("primelet_chattiness = Chatty\n") .. " " .. load("primelet_chattiness = loud\n") .. " " .. load("")
+end""")(TMP)
+check("config: primelet_chattiness reads off/quiet/normal/chatty, else normal", cfgt == "chatty normal normal", cfgt)
+
+# Secrecy: nothing a player sees mentions what five Minis are for ----------
+import re  # noqa: E402
+SHIP = os.path.join(ROOT, "SkillsOfAshenfallHorticulture")
+bad = []
+for dirpath, _, files in os.walk(SHIP):
+    for fn in files:
+        if re.search(r"summon|ritual", fn, re.I):
+            bad.append("file name " + fn)
+        if not fn.endswith((".lua", ".md", ".txt")):
+            continue
+        p = os.path.join(dirpath, fn)
+        text = open(p, encoding="utf-8", errors="replace").read()
+        rel = os.path.relpath(p, SHIP)
+        for word in [r"summon", r"ritual", r"post_v1", r"V\.RITUAL"]:
+            if re.search(word, text, re.I):
+                bad.append(rel + ": " + word)
+        if fn == "horticulture_primelet_voice.lua" and re.search(r"min = 75|master", text):
+            bad.append(rel + ": 75+ band")
+        if fn in ("README.md", "CHANGELOG.md", "horticulture_config.lua", "horticulture_perks.lua") and re.search(r"\b(ring|circle|five minis|level 75)\b", text, re.I):
+            bad.append(rel + ": ring/circle")
+check("secrecy: no summoning, ritual or post-v1 text shipped; README, CHANGELOG, config and perks never mention a ring", not bad, bad)
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):

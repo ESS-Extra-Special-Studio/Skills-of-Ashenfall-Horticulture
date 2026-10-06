@@ -47,17 +47,10 @@ Looks.MESH = {
     goldIngot = asset(ITEM .. "Ingots/SM_Ingot_Gold_01"),
 }
 
--- Cooked hybrid meshes, when the asset pak is installed. "Additions" meshes
--- hold only the new parts, modelled on the vanilla host's pivot.
-local MOD_ART = "/Game/Mods/SkillsOfAshenfallHorticulture/Art/Plants/"
-Looks.PACKAGED = {
-    TuberwoodAsh = asset(MOD_ART .. "TuberwoodAsh/SM_TuberwoodAsh_Additions_01"),
-    BrassicaOak = asset(MOD_ART .. "BrassicaOak/SM_BrassicaOak_Additions_01"),
-    Brassitato = asset(MOD_ART .. "Brassitato/SM_Brassitato_Additions_01"),
-    SheafAsh = asset(MOD_ART .. "SheafAsh/SM_SheafAsh_Additions_01"),
-    WeepingOak = asset(MOD_ART .. "WeepingOak/SM_WeepingOak_Additions_01"),
-    BrassicaPrimelet = asset(MOD_ART .. "BrassicaPrimelet/SM_BrassicaPrimelet_01"),
-}
+-- Whole cooked hybrid meshes by hybrid id. None ship: every hybrid is the
+-- host bearing the donor's produce (placement data). meshes.txt can still
+-- point a hybrid at a cooked mesh.
+Looks.PACKAGED = {}
 
 -- Scion meshes for ordinary combinations: a few small pieces of the scion.
 local SCION_MESH = {
@@ -114,14 +107,18 @@ end
 local layout
 Looks.FRUIT = { cabbage = true, cabbage2 = true, cabbage3 = true, potato = true, wheat = true, onion = true }
 
--- Fruit pieces never above Placements.FRUIT_MAX (giant fruit reads wrong).
+-- The built-in layout, only for combinations the placement data does not
+-- cover. Nothing is ever larger than the game draws it: no piece above
+-- natural size (fruit above Placements.FRUIT_MAX), and the host keeps its
+-- own scale (the second value is always 1.0).
 function Looks.Layout(hybridId, scion, hostKind, size)
-    local out, hostScale = layout(hybridId, scion, hostKind, size)
+    local out = layout(hybridId, scion, hostKind, size)
     local P = require("horticulture_placements")
     for _, p in ipairs(out) do
-        if Looks.FRUIT[p.mesh] then p.scale = math.min(p.scale, P.FruitMax(Looks.MESH[p.mesh])) end
+        local max = Looks.FRUIT[p.mesh] and P.FruitMax(Looks.MESH[p.mesh]) or 1.0
+        p.scale = math.min(p.scale, max)
     end
-    return out, hostScale
+    return out, 1.0
 end
 
 layout = function(hybridId, scion, hostKind, size)
@@ -236,8 +233,8 @@ function Looks.AttachmentPieces(list, hostScale)
     return out
 end
 
--- The Brassica Primelet: a vanilla cabbage, tinted, with a crown of gold
--- ingots stood on end. Placeholder for a pipeline model (Looks.PACKAGED).
+-- The Brassica Primelet without its placement data file: a vanilla cabbage,
+-- tinted, with a crown of gold ingots stood on end.
 Looks.PRIMELET_TINT = { hue = 0.12, color = { R = 0.75, G = 0.85, B = 0.35 } }
 
 function Looks.PrimeletLayout(scale)
@@ -282,6 +279,8 @@ local attachments = {}
 local looksDir = nil
 local scriptsDir = nil
 local Placements = require("horticulture_placements")
+local Generic = require("horticulture_hybrid_generic")
+local Primelets = require("horticulture_primelet_looks")
 
 -- Placement looks: at most CAP pieces per host (instanced, or as actors),
 -- BATCH actors added per refresh. mode "ism" or "actors" (dev toggle).
@@ -355,7 +354,13 @@ function Looks.Init(util, dir)
     local pak = io.open(dir .. "\\..\\" .. Looks.PAK_FILE, "rb")
     havePak = pak ~= nil
     if pak then pak:close() end
-    U.log("Horticulture pak " .. (havePak and "installed: hybrid stalks shown" or "not installed: hybrid looks use the game's meshes only"))
+    U.log("Horticulture pak " .. (havePak and "installed: hybrid stalks and Primelet faces shown" or "not installed: hybrid looks use the game's meshes only"))
+    if Generic.Load(dir .. "\\placements") then
+        U.log("Generic hybrid looks: " .. table.concat(Generic.Files(), ", "))
+    else
+        U.log("Generic hybrid look data missing from Scripts\\placements; ordinary combinations use the built-in layout")
+    end
+    if Primelets.Load(dir .. "\\placements") then U.log("Primelet looks: " .. Primelets.File()) end
     local f = io.open(dir .. "\\..\\meshes.txt", "r")
     if f then
         overrides = Looks.ParseOverrides(f:read("*a"))
@@ -754,12 +759,29 @@ local function continue_actors(b)
     return false
 end
 
--- Builds a flagship's look from placement data. False when the data does
--- not cover this host (the built-in layout is used instead).
-local function apply_placement(world, b, h, hybridId)
+-- The placement data for graft g: the flagship's own file when it covers
+-- this host's mesh, else the generic look for the combination (socket set
+-- of the host mesh x produce of the scion). nil for combinations beyond
+-- Horticulture 25.
+local function placement_for(h, hybridId, g)
     local data = scriptsDir and Placements.Load(scriptsDir, hybridId)
+    local comp, shape, key, name
+    if data then comp, shape, key, name = host_component(h, data) end
+    if not shape and g and Generic.Loaded() then
+        local gd = Generic.Placement(g.scion, g.host)
+        if gd then
+            data = gd
+            comp, shape, key, name = host_component(h, data)
+        end
+    end
+    return data, comp, shape, key, name
+end
+
+-- Builds a hybrid's look from placement data. False when no data covers
+-- this host (the built-in layout is used instead).
+local function apply_placement(world, b, h, hybridId, g)
+    local data, comp, shape, key, name = placement_for(h, hybridId, g)
     if not data then return false end
-    local comp, shape, key, name = host_component(h, data)
     if not shape then
         U.log_once("noshape" .. hybridId .. tostring(key), string.format("%s: no placement shape for host mesh(es) %s; built-in look used",
             hybridId, key ~= "" and key or "(none readable)"))
@@ -799,9 +821,17 @@ local function apply_placement(world, b, h, hybridId)
     return true
 end
 
+-- The host's identity for redraws: the actor and its current mesh, so a
+-- plot's growth stage or a sapling growing up rebuilds the look.
+local function host_sig(h)
+    local c = h.comps and h.comps[1]
+    if not U.valid(c) then pcall(function() c = h.actor.RootStaticMeshComponent end) end
+    return U.full(h.actor) .. "|" .. tostring(U.valid(c) and mesh_key(c) or "")
+end
+
 function Looks.Apply(g, h, mode, hybridId)
     local b = built[g.id]
-    local hostName = U.full(h.actor)
+    local hostName = host_sig(h)
     if b and b.host == hostName and b.mode == mode and U.valid(h.actor) then
         if b.queue then continue_actors(b) end
         b.count = math.max(#b.actors, b.instances or 0)
@@ -819,7 +849,7 @@ function Looks.Apply(g, h, mode, hybridId)
     built[g.id] = b
     local pieces, hostScale = nil, 1.0
     local packaged = mode == "hybrid" and Looks.Packaged(hybridId) or nil
-    if mode == "hybrid" and not packaged and apply_placement(world, b, h, hybridId) then
+    if mode == "hybrid" and not packaged and apply_placement(world, b, h, hybridId, g) then
         b.count = math.max(#b.actors, b.instances or 0)
         if swayer and b.instances and b.t and b.anchor and h.kind ~= "plot" then
             swayer:add(g.id, b, { X = b.t.loc.X, Y = b.t.loc.Y, Yaw = b.t.rot.Yaw })
@@ -844,35 +874,50 @@ function Looks.Apply(g, h, mode, hybridId)
         pieces, hostScale = Looks.Layout(hybridId, g.scion, h.kind, size)
     end
     place(world, b, base, yaw, pieces)
-    if mode == "hybrid" then
-        local comps = h.comps or mesh_components(h.actor)
-        if not Looks.NO_TINT[hybridId] then b.tinted = tint(comps, g.scion) end
-        if hostScale ~= 1.0 then b.scaled = scale_comps(comps, hostScale) end
-    end
     b.count = #b.actors
     return b.count
 end
 
--- A Brassica Primelet at loc, facing yaw, at its stage's scale. Rebuilt
--- only when it moves or grows.
-function Looks.ApplyPrimelet(id, loc, yaw, scale)
-    local sig = string.format("%.0f,%.0f,%.0f,%.0f,%.2f", loc.X, loc.Y, loc.Z, yaw or 0, scale or 1)
+-- The pieces of a Primelet at stageKey ("sprout", "primelet", "primeling")
+-- and the height of its speech bubble above loc. A grown Mini not yet potted
+-- sits on the ground without the pot.
+function Looks.PrimeletPieces(stageKey, personality, potted)
+    local pieces = Primelets.Pieces(stageKey, personality or "curious", havePak)
+    if not pieces then
+        local s = ({ sprout = 0.8, primelet = 1.15, primeling = 1.5 })[stageKey] or 1
+        return Looks.PrimeletLayout(s), 60 * s
+    end
+    local stage = Primelets.Stage(stageKey) or {}
+    local bubble = stage.speech_bubble_z_cm or 60
+    if stage.potted and not potted then
+        local out, lift = {}, stage.lift_cm or 0
+        for _, p in ipairs(pieces) do
+            if p.group ~= "pot" and p.name ~= "pot" then
+                p.z = (p.z or 0) - lift
+                out[#out + 1] = p
+            end
+        end
+        return out, bubble - lift
+    end
+    return pieces, bubble
+end
+
+-- A Primelet at loc, facing yaw. Rebuilt only when it moves, grows or is
+-- potted. Returns the number of pieces and the bubble height.
+function Looks.ApplyPrimelet(id, loc, yaw, stageKey, personality, potted)
+    local sig = string.format("%.0f,%.0f,%.0f,%.0f,%s,%s,%s", loc.X, loc.Y, loc.Z, yaw or 0,
+        tostring(stageKey), tostring(personality), potted and "pot" or "")
     local b = built[id]
-    if b and b.host == sig and b.count > 0 and U.valid(b.actors[1]) then return b.count end
+    if b and b.host == sig and b.count > 0 and U.valid(b.actors[1]) then return b.count, b.bubbleZ end
     Looks.Clear(id)
     local world = UEHelpers.GetWorld()
     if not U.valid(world) then return 0 end
-    b = { host = sig, mode = "primelet", actors = {}, count = 0 }
+    local pieces, bubbleZ = Looks.PrimeletPieces(stageKey, personality, potted)
+    b = { host = sig, mode = "primelet", actors = {}, count = 0, bubbleZ = bubbleZ }
     built[id] = b
-    local packaged = Looks.Packaged("BrassicaPrimelet")
-    if packaged then
-        local a = spawn(world, packaged, loc, { Pitch = 0, Yaw = yaw or 0, Roll = 0 }, scale or 1)
-        if a then b.actors[#b.actors + 1] = a end
-    else
-        place(world, b, loc, yaw or 0, Looks.PrimeletLayout(scale))
-    end
+    place(world, b, loc, yaw or 0, pieces)
     b.count = #b.actors
-    return b.count
+    return b.count, bubbleZ
 end
 
 return Looks

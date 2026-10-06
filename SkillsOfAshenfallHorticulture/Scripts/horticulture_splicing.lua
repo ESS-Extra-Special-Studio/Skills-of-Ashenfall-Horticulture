@@ -20,6 +20,7 @@ local Looks = require("horticulture_looks")
 local Primelet = require("horticulture_primelet")
 local Tag = require("horticulture_nametag")
 local Names = require("horticulture_names")
+local Chatter = require("horticulture_primelet_chatter")
 
 local Splicing = {}
 
@@ -56,6 +57,7 @@ local function file_for(charKey)
 end
 
 local function save()
+    if st then st.lastSeen = os.time() end
     if st and path and not Store.Save(path, st) then
         U.log_once("savefail" .. path, "Could not write " .. path)
     end
@@ -80,11 +82,36 @@ local function ensure_state()
     plotStage = {}
     U.log(string.format("Splicing for %s: %d cutting(s), %d graft(s), dawn %d (%s)",
         tostring(charKey), #st.cuttings, #st.grafts, st.dawn, path))
+    Chatter.Reset(st)
+    local rolled = Primelet.Migrate(st, function(n) return math.random(n) end)
+    if rolled > 0 then
+        U.log(string.format("Gave %d Primelet(s) from an older save a personality and a name", rolled))
+        save()
+    end
     return st
 end
 
 local function level()
     return cfg.ESL.GetLevel(cfg.SKILL) or 1
+end
+
+-- The character's vanilla levels that gate splicing (Rules.SkillCheck), from
+-- the game's own save through ESL; a few seconds old at most.
+local skillCache = { at = -100 }
+local skillOverride = nil
+local function skills()
+    if now() - skillCache.at < 5 then return skillCache.levels end
+    local out = {}
+    for k, v in pairs(skillOverride or {}) do out[k] = v end
+    for _, name in ipairs({ "Farming", "Woodcutting" }) do
+        if out[name] == nil then
+            local ok, n = pcall(function() return cfg.ESL.GetVanillaLevel and cfg.ESL.GetVanillaLevel(name) end)
+            if ok and type(n) == "number" then out[name] = n end
+        end
+    end
+    if not out.Farming then U.log_once("nofarming", "Vanilla Farming level not readable; splicing is not gated by it") end
+    skillCache = { at = now(), levels = out }
+    return out
 end
 
 -- Cards -------------------------------------------------------------------
@@ -100,6 +127,7 @@ end
 local BANNER_LEAD = 6
 local BANNER_GRACE = 1.0
 local MAX_HOLD = 25
+local MAX_HOLD_ORDINARY = 20
 local revealHoldUntil = 0
 local heldSince, blockedAt = nil, nil
 
@@ -125,13 +153,15 @@ local function reveal_blocked(t)
     return ok and shown
 end
 
+-- Every queued card waits while the level-up banner is up (the two share the
+-- top of the screen); a discovery waits longer than an ordinary card.
 local function pump_cards()
     if #cards == 0 or now() < nextCardAt then return end
     local c = cards[1]
-    if c[5] then
+    do
         local t = now()
         heldSince = heldSince or t
-        if t - heldSince < MAX_HOLD then
+        if t - heldSince < (c[5] and MAX_HOLD or MAX_HOLD_ORDINARY) then
             if reveal_blocked(t) then blockedAt = t return end
             if blockedAt and t - blockedAt < BANNER_GRACE then return end
         end
@@ -143,10 +173,22 @@ local function pump_cards()
     nextCardAt = now() + math.max(CARD_GAP, c[4] + 0.5)
 end
 
--- Says why something could not be done. Not queued: it answers a key press.
+-- A card that answers a key press: shown now, unless the level-up banner is
+-- up or due, when it joins the queue behind it.
+local function show_card(kicker, title, detail, seconds)
+    if cfg.quiet then return end
+    if #cards > 0 or reveal_blocked(now()) then
+        card(kicker, title, detail, seconds)
+        return
+    end
+    cfg.ESL.ShowCard(cfg.SKILL, kicker, title, detail or "", seconds)
+    nextCardAt = math.max(nextCardAt, now() + seconds + 0.5)
+end
+
+-- Says why something could not be done.
 local function refuse(kicker, why)
     U.log(kicker .. ": " .. tostring(why))
-    if not cfg.quiet then cfg.ESL.ShowCard(cfg.SKILL, kicker, why, "", 3.5) end
+    show_card(kicker, why, "", 3.5)
 end
 
 local function xp(amount, label)
@@ -357,7 +399,7 @@ local function refresh_primelets()
             if U.dist2d({ X = p.x or 0, Y = p.y or 0 }, me) <= LOOK_RANGE then
                 local id = "prime:" .. p.id
                 want[id] = true
-                local n = Looks.ApplyPrimelet(id, { X = p.x, Y = p.y, Z = p.z }, p.yaw, Primelet.Stage(p).scale)
+                local n = Looks.ApplyPrimelet(id, { X = p.x, Y = p.y, Z = p.z }, p.yaw, Primelet.Stage(p).id, p.personality, p.potted)
                 U.log_once("look" .. id .. p.stage, string.format("%s %s at %.0f, %.0f: %d piece(s)", Primelet.Name(p), p.id, p.x, p.y, n))
             end
         end
@@ -410,7 +452,14 @@ function Splicing.Dawn(reason)
     U.log(string.format("Dawn %d (%s): %d graft(s) resolved, %d cutting(s) wilted", st.dawn, reason or "clock", #outcomes, #wilted))
     for _, p in ipairs(grown or {}) do
         xp(Rules.XP.primeletStage, "Primelet grew")
-        card("THE PRIMELET HAS GROWN", Primelet.Name(p), Primelet.GROWN[p.stage] or "", 6)
+        local detail = Primelet.GROWN[p.stage] or ""
+        local words = Primelet.Grown(p) and Chatter.FirstWords(p)
+        if words then detail = detail .. "\n\nIts first words: \"" .. words .. "\"" end
+        card("THE PRIMELET HAS GROWN", Primelet.Name(p), detail, 7)
+    end
+    if grown and #grown > 0 then
+        save()
+        Chatter.CheckArrangement("grew")
     end
     for _, o in ipairs(outcomes) do
         local g = o.graft
@@ -474,7 +523,7 @@ end
 
 local function source_of(c)
     local crop = c.kind == "plot" or c.kind == "wild"
-    local src = { species = c.species, kind = crop and "crop" or "tree", level = level(), alive = c.alive }
+    local src = { species = c.species, kind = crop and "crop" or "tree", level = level(), alive = c.alive, skills = skills() }
     if c.kind == "plot" then
         src.key = c.key
     elseif c.kind == "wild" then
@@ -491,6 +540,7 @@ local function host_from(c)
     return {
         species = c.species, kind = c.kind, key = c.kind == "plot" and c.key or nil, planted = c.planted,
         stage = c.stage, tier = tier, x = c.loc.X, y = c.loc.Y, z = c.loc.Z, world = World.WorldKey(),
+        skills = skills(),
     }
 end
 
@@ -545,18 +595,24 @@ local function near_primelet()
     return Primelet.Near(st, feet, yaw, World.WorldKey())
 end
 
+-- Tending once a day grows it; after that, E talks to it. A grown Mini
+-- answers aloud; younger ones are narrated on a card.
 local function tend(p)
     local line, counted = Primelet.Tend(st, p, function(n) return math.random(n) end)
+    Chatter.Attended(p)
     if counted then
-        save()
         local nextStage = Primelet.STAGES[p.stage + 1]
         if nextStage then xp(Rules.XP.tend, "Primelet tended") end
         vfx_at({ X = p.x, Y = p.y, Z = (p.z or 0) + 30 })
     end
-    if not cfg.quiet then
-        cfg.ESL.ShowCard(cfg.SKILL, counted and "TENDED" or "PRIMELET", Primelet.Name(p), line, 5)
+    save()
+    local said = Primelet.Grown(p) and Chatter.Event(p, counted and "tended" or "talk")
+    if not said and not cfg.quiet then
+        if counted then line = Chatter.Narration(p, "tended") or line end
+        if Primelet.Grown(p) and not counted then line = Primelet.TENDED_TODAY end
+        show_card(counted and "TENDED" or "PRIMELET", Primelet.Name(p), line, 5)
     end
-    U.log("Primelet " .. p.id .. (counted and " tended" or " already tended today"))
+    U.log("Primelet " .. p.id .. (counted and " tended" or " talked to"))
 end
 
 local function pick_up(p)
@@ -564,11 +620,14 @@ local function pick_up(p)
     if not entry then refuse("SATCHEL", why) return end
     save()
     refresh_primelets()
+    local said = Chatter.Event(p, "picked_up")
     if not cfg.quiet then
-        cfg.ESL.ShowCard(cfg.SKILL, "PICKED UP", Primelet.Name(p),
-            "It settles into your satchel without complaint. Press " .. cfg.actionKey .. " to set it down.", 5)
+        show_card("PICKED UP", Primelet.Name(p),
+            (said and "It settles into your satchel, eventually." or "It settles into your satchel without complaint.")
+            .. " Press " .. cfg.actionKey .. " to set it down.", 5)
     end
     U.log("Primelet " .. p.id .. " picked up")
+    if Primelet.Grown(p) and p.potted then Chatter.CheckArrangement("picked up") end
 end
 
 local function set_down(entry)
@@ -577,14 +636,20 @@ local function set_down(entry)
     local d = 120
     local x, y = feet.X + math.cos(math.rad(yaw)) * d, feet.Y + math.sin(math.rad(yaw)) * d
     local z = World.GroundAt(x, y, feet.Z)
-    local p, why = Primelet.Place(st, entry, x, y, z, yaw + 180, World.WorldKey())
+    local p, why, firstPot = Primelet.Place(st, entry, x, y, z, yaw + 180, World.WorldKey())
     if not p then refuse("PRIMELET", why) return end
     save()
     refresh_primelets()
+    if Primelet.Grown(p) then Chatter.Event(p, firstPot and "potted" or "placed_home") end
     if not cfg.quiet then
-        cfg.ESL.ShowCard(cfg.SKILL, "SET DOWN", Primelet.Name(p), "It surveys its new surroundings and finds them adequate.", 4)
+        if firstPot then
+            show_card("POTTED", Primelet.Name(p), "It has claimed a pot, and with it, this spot. It goes wherever you set it down from now on, pot and all.", 5)
+        else
+            show_card("SET DOWN", Primelet.Name(p), "It surveys its new surroundings and finds them adequate.", 4)
+        end
     end
     U.log(string.format("Primelet %s set down at %.0f, %.0f, %.0f (world %s)", p.id, x, y, z, tostring(p.world)))
+    if Primelet.Grown(p) then Chatter.CheckArrangement("set down") end
 end
 
 -- E on a hybrid tree picks from it. A standing tree has no interaction of
@@ -650,7 +715,7 @@ function Splicing.Action()
         if pickWhy then refuse("NOTHING TO PICK", pickWhy) return end
         U.log("CANNOT GRAFT: " .. tostring(why))
         if not cfg.quiet then
-            cfg.ESL.ShowCard(cfg.SKILL, "CANNOT GRAFT", why, "Alt+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
+            show_card("CANNOT GRAFT", why, "Alt+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
         end
         return
     end
@@ -671,7 +736,7 @@ function Splicing.Cycle()
     save()
     if not cfg.quiet then
         local p = c.primelet and Primelet.Find(st, c.primelet)
-        cfg.ESL.ShowCard(cfg.SKILL, p and "SELECTED" or "CUTTING SELECTED", p and Primelet.Name(p) or Rules.Name(c.species),
+        show_card(p and "SELECTED" or "CUTTING SELECTED", p and Primelet.Name(p) or Rules.Name(c.species),
             string.format("%d of %d in your satchel.%s", st.selected, #st.cuttings,
                 p and (" " .. cfg.actionKey .. " sets it down.") or ""), 2.5)
     end
@@ -764,12 +829,12 @@ function Splicing.InspectGraft()
     if not g then refuse("NO GRAFT", "Nothing is grafted onto this plant") return end
     -- Asked for, so shown even in quiet mode.
     if g.state == "pending" then
-        cfg.ESL.ShowCard(cfg.SKILL, "GRAFT", Rules.Name(g.scion) .. " onto " .. Rules.Name(g.host):lower(),
+        show_card("GRAFT", Rules.Name(g.scion) .. " onto " .. Rules.Name(g.host):lower(),
             string.format("Waiting for dawn. About %d%% it takes.", Core.ChanceFor(st, g, level())), 4)
         return
     end
     local _, why = Core.CanPick(st, g)
-    cfg.ESL.ShowCard(cfg.SKILL, "HYBRID", Rules.HybridName(g.scion, g.host), why and (why .. ".") or "Ready to pick.", 4)
+    show_card("HYBRID", Rules.HybridName(g.scion, g.host), why and (why .. ".") or "Ready to pick.", 4)
 end
 
 -- Status ------------------------------------------------------------------
@@ -811,6 +876,14 @@ end
 -- Developer helpers -------------------------------------------------------
 
 function Splicing.State() return ensure_state() end
+
+-- Developer only: pretend vanilla levels ({ Farming = 10 }), nil to read the
+-- save again. Returns the levels now in use.
+function Splicing.DevSetSkills(levels)
+    skillOverride = levels
+    skillCache.at = -100
+    return skills()
+end
 function Splicing.Save() save() end
 function Splicing.Refresh() hostsCache.at = -100 refresh_looks() refresh_primelets() end
 
@@ -837,6 +910,30 @@ function Splicing.ForcePrimelet()
     U.log(string.format("[DEV] Seeded cabbage-on-cabbage graft %s; the Primelet will appear at %.0f, %.0f after dawn", g.id, x + Core.PRIMELET_OFFSET, y))
 end
 
+-- Developer only: the Primelet nearest the player grows one stage now.
+function Splicing.DevGrowPrimelet()
+    if not ensure_state() then return end
+    local me = U.location(U.pawn())
+    local best, bestD = nil, math.huge
+    for _, p in ipairs(Primelet.Visible(st, World.WorldKey())) do
+        local d = me and U.dist2d({ X = p.x or 0, Y = p.y or 0 }, me) or 0
+        if d < bestD then best, bestD = p, d end
+    end
+    local p = best
+    if not p then U.log("[DEV] No Primelet set down in this world") return end
+    local nextStage = Primelet.STAGES[p.stage + 1]
+    if not nextStage then U.log("[DEV] " .. Primelet.Name(p) .. " is fully grown") return end
+    p.stage, p.growth = p.stage + 1, nextStage.need
+    local detail = Primelet.GROWN[p.stage] or ""
+    local words = Primelet.Grown(p) and Chatter.FirstWords(p)
+    if words then detail = detail .. "\n\nIts first words: \"" .. words .. "\"" end
+    save()
+    refresh_primelets()
+    card("THE PRIMELET HAS GROWN", Primelet.Name(p), detail, 7)
+    U.log(string.format("[DEV] %s %s is now stage %d (%s, %s)", Primelet.Name(p), p.id, p.stage, tostring(p.personality), tostring(p.name)))
+    Chatter.CheckArrangement("grew")
+end
+
 function Splicing.Dump()
     if not ensure_state() then U.log("[splice] no character") return end
     U.log(string.format("[splice] dawn %d, hour %s, level %d, file %s", st.dawn, tostring(World.Hour()), level(), path))
@@ -846,8 +943,8 @@ function Splicing.Dump()
             g.id, g.state, table.concat(g.plants, ">"), g.kind, g.x or 0, g.y or 0, tostring(g.made), tostring(g.lastPick)))
     end
     for _, p in ipairs(st.primelets or {}) do
-        U.log(string.format("[splice] primelet %s stage %d growth %d tended %d world %s carried %s at %.0f, %.0f, %.0f",
-            p.id, p.stage, p.growth, p.tended, tostring(p.world), tostring(p.carried), p.x or 0, p.y or 0, p.z or 0))
+        U.log(string.format("[splice] primelet %s \"%s\" stage %d growth %d tended %d world %s carried %s potted %s at %.0f, %.0f, %.0f",
+            p.id, Primelet.Name(p), p.stage, p.growth, p.tended, tostring(p.world), tostring(p.carried), tostring(p.potted), p.x or 0, p.y or 0, p.z or 0))
     end
     local c = World.Aimed()
     if c then
@@ -906,9 +1003,43 @@ function Splicing.HybridSpots()
     return out
 end
 
+-- The Action Wheel names its target itself; then our tag only covers what
+-- the wheel does not (Splicing.wheelNames is set by horticulture_wheel).
 local function update_tag()
+    local line = Chatter.TagLine()
+    if line then Tag.Show(line) return end
+    if Splicing.wheelNames and Splicing.wheelNames() then Tag.Show(nil) return end
     local ok, text = pcall(Splicing.TagText)
     Tag.Show(ok and text or nil)
+end
+
+-- The name the Action Wheel shows for its target ({ kind, name, x, y, z }):
+-- a Primelet standing there, or a hybrid growing there; nil leaves the
+-- game's name.
+function Splicing.TargetName(target)
+    if not (st and cfg.ESL.Character() and type(target) == "table" and target.x and target.y) then return nil end
+    if target.self or target.kind == "self" then return nil end
+    local best, bestD = nil, Primelet.CLOSE
+    for _, p in ipairs(Primelet.Visible(st, World.WorldKey())) do
+        local d = math.sqrt(((p.x or 0) - target.x) ^ 2 + ((p.y or 0) - target.y) ^ 2)
+        if d <= bestD then best, bestD = p, d end
+    end
+    if best then return Primelet.Name(best) end
+    local kind = (target.kind == "plot" or target.kind == "crop") and "plot" or "tree"
+    local g = Core.GraftOn(st, { kind = kind, x = target.x, y = target.y })
+    if g and g.state == "hybrid" then return hybrid_name(g) end
+    return nil
+end
+
+-- Hybrid names within r of p, for the Minis to remark on.
+local function hybrids_near(p, r)
+    local out = {}
+    for _, g in ipairs(st and st.grafts or {}) do
+        if g.state == "hybrid" and g.x and math.sqrt((g.x - (p.x or 0)) ^ 2 + (g.y - (p.y or 0)) ^ 2) <= r then
+            out[#out + 1] = hybrid_name(g)
+        end
+    end
+    return out
 end
 
 function Splicing.Start(config)
@@ -916,9 +1047,21 @@ function Splicing.Start(config)
     Looks.Init(U, cfg.dir)
     Looks.StartSway({ enabled = cfg.sway ~= false, deg = cfg.swayDegrees, debug = cfg.debug })
     math.randomseed(os.time())
+    Chatter.Init(U, cfg, {
+        state = function() return st end,
+        save = save,
+        level = level,
+        catalogue = function() return #Splicing.Discovered() end,
+        flagships = function() return (flagship_count()) end,
+        hybridsNear = hybrids_near,
+        refresh = refresh_primelets,
+    })
     U.every(2000, "Splicing clock", function() U.game(watch_clock) end)
     U.every(2000, "Hybrid looks", function() U.game(refresh_looks) U.game(refresh_primelets) end)
     U.every(500, "Splicing cards", pump_cards)
+    U.every(math.floor(Chatter.PollSeconds() * 1000), "Primelet chatter",
+        function() U.game(function() if st and cfg.ESL.Character() then Chatter.Poll() end end) end)
+    U.every(100, "Primelet bubbles", function() if Chatter.Busy() then U.game(Chatter.Tick) end end)
     if cfg.nameTag ~= false then U.every(200, "Hybrid name tag", function() U.game(update_tag) end) end
     local key = Key[cfg.actionKey]
     RegisterKeyBindAsync(key, {}, function() U.game(Splicing.Action) end)

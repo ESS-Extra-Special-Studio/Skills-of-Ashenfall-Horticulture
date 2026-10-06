@@ -13,8 +13,11 @@ local Primelet = require("horticulture_primelet")
 local Wheel = {}
 
 local function level_locked(why)
-    return type(why) == "string" and why:find("Horticulture %d+") ~= nil
+    if type(why) ~= "string" then return false end
+    return why:find("Horticulture %d+") ~= nil or why:find("^Needs %a+ %d+") ~= nil
 end
+
+Wheel.LevelLocked = level_locked
 
 local function slice(ok, why, label)
     return { enabled = ok == true, reason = not ok and why or nil, locked = not ok and level_locked(why) or nil, label = label }
@@ -42,7 +45,11 @@ function Wheel.View(ctx)
     local p = ctx.primelet
     if p then
         local name = Primelet.Name(p)
-        v.tend = slice(p.tended ~= st.dawn, "Already tended today. Again after dawn", "Tend " .. name)
+        if p.tended == st.dawn and Primelet.Grown(p) then
+            v.tend = { enabled = true, label = "Talk to " .. name }
+        else
+            v.tend = slice(p.tended ~= st.dawn, "Already tended today. Again after dawn", "Tend " .. name)
+        end
         v.pick_up = slice(#st.cuttings < Rules.SATCHEL_SIZE,
             string.format("Your satchel is full (%d). Graft a cutting first", Rules.SATCHEL_SIZE), "Pick up " .. name)
     end
@@ -102,6 +109,7 @@ function Wheel.Definition(S, view, status)
     end
     return {
         id = "Horticulture", name = "Horticulture", mod = "Skills of Ashenfall: Horticulture",
+        target_name = function(target) return S.TargetName and S.TargetName(target) or nil end,
         actions = {
             { id = "pick", label = "Pick hybrid", kinds = { "tree", "sapling" }, order = 1, ask = true,
               hint = "Pick from a hybrid you grew (G)", check = check("pick"), run = function() S.WheelPick() end },
@@ -137,12 +145,20 @@ function Wheel.Definition(S, view, status)
     }
 end
 
--- Registers with the wheel when it is installed. status: the function the
--- status key runs. Returns true when registered.
+-- Registers with the wheel when it is installed: the client in ESL, or the
+-- standalone ActionWheel mod. status: the function the status key runs.
+-- Returns true when registered.
 function Wheel.Start(S, dir, status)
-    package.path = dir .. "\\..\\..\\ActionWheel\\Scripts\\?.lua;" .. package.path
+    package.path = dir .. "\\..\\..\\ESLDragonWilds\\Scripts\\?.lua;" .. dir .. "\\..\\..\\ActionWheel\\Scripts\\?.lua;" .. package.path
     local okAW, AW = pcall(require, "actionwheel")
     if not okAW or type(AW) ~= "table" or type(AW.Register) ~= "function" then return false end
+    -- With the wheel naming its targets, our own name tag stands down.
+    if type(AW.ShowsTargetName) == "function" then
+        S.wheelNames = function()
+            local ok, on = pcall(AW.ShowsTargetName)
+            return ok and on == true
+        end
+    end
     -- One context per wheel opening: every check of one query runs together.
     local cached, at = nil, -1
     local function view()

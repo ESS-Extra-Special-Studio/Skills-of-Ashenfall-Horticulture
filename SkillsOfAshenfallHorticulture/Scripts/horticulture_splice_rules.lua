@@ -92,6 +92,43 @@ Rules.AXES = {
     ITEM_Logging_Axe_Rune = 8,
 }
 
+-- Vanilla skill levels a plant needs before it can be spliced: taken as a
+-- cutting, or used in a graft as the cutting or the host. From the game's
+-- own data (build 25632050, read 2026-10-06; sources in the Dragonwilds
+-- docs, HORTICULTURE_SKILL_GATES.md):
+--   - No seed, crop or plot recipe asks for a Farming level. Plots unlock
+--     when their logs are first picked up; crops need only farming itself
+--     (Growing Pains, Farming 1). The recipes that do name Farming are tools.
+--   - No recipe asks for Woodcutting; a tree is gated by the axe that can
+--     fell it (power, above, checked by CanCut).
+--   - The one vanilla level that gates a plant is Tree Farming, Farming 20:
+--     planting a tree.
+-- Keyed by kind, then by species to override a kind.
+Rules.SKILL_GATES = {
+    crop = { { skill = "Farming", level = 1 } },
+    tree = { { skill = "Farming", level = 20 } },
+}
+Rules.SKILL_GATE_SPECIES = {}
+
+function Rules.SkillGates(species)
+    local own = Rules.SKILL_GATE_SPECIES[species]
+    if own then return own end
+    if Rules.TREES[species] then return Rules.SKILL_GATES.tree end
+    if Rules.CROPS[species] then return Rules.SKILL_GATES.crop end
+    return {}
+end
+
+-- skills: vanilla skill name -> the character's level. A level that cannot
+-- be read never blocks. Returns true, or false and "Needs Farming 20".
+function Rules.SkillCheck(species, skills)
+    if not skills then return true end
+    for _, g in ipairs(Rules.SkillGates(species)) do
+        local have = skills[g.skill]
+        if have and have < g.level then return false, string.format("Needs %s %d", g.skill, g.level) end
+    end
+    return true
+end
+
 function Rules.IsTree(species) return Rules.TREES[species] ~= nil end
 function Rules.IsCrop(species) return Rules.CROPS[species] ~= nil end
 
@@ -233,7 +270,8 @@ function Rules.Products(scion, host)
 end
 
 -- Can this source give a cutting? src = { species, kind = "crop"|"tree",
--- level, axePower (tree sources), alive (crop sources) }.
+-- level, axePower (tree sources), alive (crop sources), skills (vanilla
+-- levels, SkillCheck) }.
 -- Returns true, or false and a reason for the card.
 function Rules.CanCut(src)
     local species, level = src.species, src.level or 1
@@ -242,6 +280,8 @@ function Rules.CanCut(src)
     local name = Rules.Name(species)
     if not band then return false, name .. " cuttings are beyond Horticulture " .. Rules.MAX_LEVEL end
     if level < band then return false, string.format("%s cuttings need Horticulture %d", name, band) end
+    local skilled, need = Rules.SkillCheck(species, src.skills)
+    if not skilled then return false, need end
     if Rules.IsTree(species) then
         local need = Rules.TREES[species].power
         if not src.axePower then return false, "Hold a logging axe to take a cutting from " .. name:lower() end
@@ -255,7 +295,8 @@ function Rules.CanCut(src)
 end
 
 -- Can this cutting go onto this host? host = { species, kind = "plot" |
--- "sapling" | "tree", planted (by a player), stage (plot stage) }.
+-- "sapling" | "tree", planted (by a player), stage (plot stage), skills
+-- (vanilla levels: both the cutting and the host must pass SkillCheck) }.
 -- Returns true, or false and a reason.
 function Rules.CanGraft(scion, host, level)
     level = level or 1
@@ -273,6 +314,10 @@ function Rules.CanGraft(scion, host, level)
     local band = Rules.Band(host.species)
     if not band then return false, hName .. " is beyond Horticulture " .. Rules.MAX_LEVEL .. " as a host" end
     if level < band then return false, string.format("%s hosts need Horticulture %d", hName, band) end
+    local ok, need = Rules.SkillCheck(scion, host.skills)
+    if not ok then return false, need .. " for " .. sName:lower() end
+    ok, need = Rules.SkillCheck(host.species, host.skills)
+    if not ok then return false, need .. " for " .. hName:lower() end
     local f = Rules.Flagship(scion, host.species)
     if f and f.level and level < f.level then
         return false, string.format("%s needs Horticulture %d", f.name, f.level)
@@ -291,7 +336,7 @@ function Rules.CanAddTo(plants, scion, host, level)
     for _, p in ipairs(plants) do
         if p == scion then return false, "It already carries " .. Rules.Name(scion):lower() end
     end
-    return Rules.CanGraft(scion, { species = plants[1], kind = host.kind, planted = host.planted, stage = host.stage }, level)
+    return Rules.CanGraft(scion, { species = plants[1], kind = host.kind, planted = host.planted, stage = host.stage, skills = host.skills }, level)
 end
 
 -- Chance in percent that a graft takes. host.tier: plot tier (plots) or the

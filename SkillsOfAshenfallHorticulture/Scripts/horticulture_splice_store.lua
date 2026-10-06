@@ -44,14 +44,22 @@ end
 local V1_FIELDS = { "id", "kind", "host", "scion", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus" }
 local GRAFT_FIELDS = { "id", "kind", "plants", "state", "made", "lastPick", "x", "y", "z", "key", "tier", "bonus", "world" }
 local NUMERIC = { made = true, lastPick = true, x = true, y = true, z = true, tier = true, bonus = true }
-local PRIMELET_FIELDS = { "id", "stage", "growth", "tended", "born", "world", "x", "y", "z", "yaw", "carried" }
-local PRIMELET_NUMERIC = { stage = true, growth = true, tended = true, born = true, x = true, y = true, z = true, yaw = true }
+-- Fields after "carried" came with the Primelet voice; older rows lack them.
+local PRIMELET_FIELDS = { "id", "stage", "growth", "tended", "born", "world", "x", "y", "z", "yaw", "carried",
+    "personality", "name", "potted", "talked", "ign", "seen", "said" }
+local PRIMELET_NUMERIC = { stage = true, growth = true, tended = true, born = true, x = true, y = true, z = true, yaw = true,
+    talked = true, ign = true, seen = true }
 
 local function row(t, fields)
     local parts = {}
     for i, f in ipairs(fields) do
         local v = t[f]
         if f == "plants" then v = table.concat(t.plants or { t.host, t.scion }, ">")
+        elseif f == "said" then
+            local keys = {}
+            for k in pairs(t.said or {}) do keys[#keys + 1] = k end
+            table.sort(keys)
+            v = table.concat(keys, ",")
         elseif type(v) == "number" and (f == "x" or f == "y" or f == "z" or f == "yaw") then v = string.format("%.0f", v)
         elseif type(v) == "boolean" then v = v and "1" or "0" end
         parts[i] = clean(v == nil and "" or v)
@@ -68,6 +76,8 @@ function Store.Serialize(st)
         "nextid=" .. st.nextId,
         "firsttaken=" .. (st.firstTaken and "1" or "0"),
     }
+    if st.pmflag1 then lines[#lines + 1] = "pmflag1=1" end
+    if st.lastSeen then lines[#lines + 1] = "lastseen=" .. string.format("%.0f", st.lastSeen) end
     for _, c in ipairs(st.cuttings) do
         lines[#lines + 1] = "cut=" .. clean(c.species) .. "|" .. c.taken .. (c.primelet and ("|" .. clean(c.primelet)) or "")
     end
@@ -115,6 +125,8 @@ function Store.Parse(text)
         elseif k == "selected" then st.selected = num(v) or 1
         elseif k == "nextid" then st.nextId = num(v) or 1
         elseif k == "firsttaken" then st.firstTaken = v == "1"
+        elseif k == "pmflag1" then st.pmflag1 = v == "1"
+        elseif k == "lastseen" then st.lastSeen = num(v)
         elseif k == "cut" then
             local p = split(v)
             if p[1] ~= "" then
@@ -133,6 +145,10 @@ function Store.Parse(text)
         elseif k == "primelet" then
             local p = read_row(v, PRIMELET_FIELDS, PRIMELET_NUMERIC)
             p.carried = p.carried == "1"
+            p.potted = p.potted == "1"
+            local said = {}
+            for _, h in ipairs(p.said and split(p.said, ",") or {}) do if h ~= "" then said[h] = true end end
+            p.said = said
             p.stage, p.growth, p.tended = p.stage or 1, p.growth or 0, p.tended or -1
             p.world = p.world or "?"
             if p.id then st.primelets[#st.primelets + 1] = p end

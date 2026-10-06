@@ -5,18 +5,23 @@
 --
 -- Text here is MOD LORE (fan-written, not Jagex canon); see the Dragonwilds
 -- docs, LORE_VERIFICATION.md.
+local Talk = require("horticulture_primelet_talk")
+
 local Primelet = {}
 
 Primelet.SPECIES = "Primelet"
 Primelet.REACH = 260
 Primelet.CLOSE = 130
 
--- need: tended days to reach the stage. scale: size of the cabbage.
+-- need: tended days to reach the stage. The look of each stage (size, face,
+-- pot) is in placements\hort_plant_brassica_primelet_*.lua. Saves keep the
+-- stage number, so a renamed stage needs no migration.
 Primelet.STAGES = {
-    { id = "sprout", name = "Primelet Sprout", need = 0, scale = 0.8 },
-    { id = "primelet", name = "Brassica Primelet", need = 2, scale = 1.15 },
-    { id = "primeling", name = "Prime-ling", need = 5, scale = 1.5 },
+    { id = "sprout", name = "Primelet Sprout", need = 0 },
+    { id = "primelet", name = "Brassica Primelet", need = 2 },
+    { id = "primeling", name = "Mini Brassica Prime", need = 5 },
 }
+Primelet.GROWN_STAGE = 3
 
 Primelet.TEND_LINES = {
     {
@@ -30,17 +35,17 @@ Primelet.TEND_LINES = {
         "The Primelet has folded its outer leaves into something like a crown. You compliment it. It knew.",
     },
     {
-        "The Prime-ling allows itself to be watered.",
-        "You ask the Prime-ling how it is. It rustles in a way that suggests fried, eventually, but not yet.",
-        "The Prime-ling regards your cooking pot for a long moment. You move the pot.",
+        "The Mini Brassica Prime allows itself to be watered.",
+        "You ask the Mini Brassica Prime how it is. It rustles in a way that suggests fried, eventually, but not yet.",
+        "The Mini Brassica Prime regards your cooking pot for a long moment. You move the pot.",
     },
 }
 
 Primelet.TENDED_TODAY = "It has had all the attention it can stand today. Come back after dawn."
 
 Primelet.GROWN = {
-    [2] = "Overnight it has unfolded a second ring of leaves and an air of quiet authority.",
-    [3] = "It is a Prime-ling now. Small birds land near it, think better of it, and leave.",
+    [2] = "Overnight it has unfolded a second layer of leaves and an air of quiet authority. It has opinions now, and a name to go with them.",
+    [3] = "It is a Mini Brassica Prime now. Small birds land near it, think better of it, and leave. Set it down at home and it will want a pot.",
 }
 
 Primelet.REVEAL = {
@@ -56,20 +61,55 @@ function Primelet.Stage(p)
     return Primelet.STAGES[p.stage] or Primelet.STAGES[1]
 end
 
+-- "Lord Savoy the Pompous" once its personality shows, else the stage name.
 function Primelet.Name(p)
-    return Primelet.Stage(p).name
+    return Talk.FullName(p) or Primelet.Stage(p).name
+end
+
+-- Rolls a personality and name for a primelet that has none: at birth, and
+-- for primelets from saves made before they had one.
+function Primelet.RollTraits(st, p, rng)
+    if p.personality and Talk.V.P[p.personality] and p.name then return false end
+    local owned, used = {}, {}
+    for _, q in ipairs(st.primelets or {}) do
+        if q ~= p and q.personality then owned[q.personality] = (owned[q.personality] or 0) + 1 end
+        if q ~= p and q.name then used[q.name] = true end
+    end
+    if not (p.personality and Talk.V.P[p.personality]) then p.personality = Talk.RollPersonality(owned, rng) end
+    if not p.name then p.name = Talk.RollName(p.personality, used, rng) end
+    p.said = p.said or {}
+    return true
+end
+
+-- Rolls every primelet missing a personality; returns how many it rolled.
+function Primelet.Migrate(st, rng)
+    local n = 0
+    for _, p in ipairs(st.primelets or {}) do
+        if Primelet.RollTraits(st, p, rng) then n = n + 1 end
+    end
+    return n
 end
 
 -- A new primelet beside the plot it came from.
-function Primelet.New(st, x, y, z, world)
+function Primelet.New(st, x, y, z, world, rng)
     st.primelets = st.primelets or {}
     local p = {
         id = "p" .. st.nextId, stage = 1, growth = 0, tended = -1, born = st.dawn,
-        world = world or "?", x = x, y = y, z = z, yaw = 0, carried = false,
+        world = world or "?", x = x, y = y, z = z, yaw = 0, carried = false, said = {},
     }
     st.nextId = st.nextId + 1
     st.primelets[#st.primelets + 1] = p
+    Primelet.RollTraits(st, p, rng or function(n) return math.random(n) end)
     return p
+end
+
+function Primelet.Grown(p) return (p.stage or 1) >= Primelet.GROWN_STAGE end
+
+-- Grown Minis this character owns (every world).
+function Primelet.GrownCount(st)
+    local n = 0
+    for _, p in ipairs(st and st.primelets or {}) do if Primelet.Grown(p) then n = n + 1 end end
+    return n
 end
 
 function Primelet.Find(st, id)
@@ -162,7 +202,10 @@ function Primelet.Place(st, entry, x, y, z, yaw, world)
     if st.selected > #st.cuttings then st.selected = math.max(1, #st.cuttings) end
     if not p then return nil, "It is not in your satchel" end
     p.carried, p.x, p.y, p.z, p.yaw, p.world = false, x, y, z, yaw or 0, world or p.world
-    return p
+    -- A grown Mini goes into a pot the first time it is set down.
+    local firstPot = Primelet.Grown(p) and not p.potted
+    if firstPot then p.potted = true end
+    return p, nil, firstPot
 end
 
 function Primelet.StatusLine(st, world)
@@ -171,7 +214,9 @@ function Primelet.StatusLine(st, world)
         local nextStage = Primelet.STAGES[p.stage + 1]
         local grow = nextStage and string.format("%d/%d days tended", p.growth, nextStage.need) or "fully grown"
         local where = p.carried and "in your satchel" or (in_world(p, world) and "at home" or "in another world")
-        parts[#parts + 1] = string.format("%s (%s, %s%s)", Primelet.Name(p), grow, where,
+        local name = Talk.FullName(p)
+        local what = name and (name .. ", " .. Primelet.Stage(p).name) or Primelet.Stage(p).name
+        parts[#parts + 1] = string.format("%s (%s, %s%s)", what, grow, where,
             p.tended == st.dawn and ", tended today" or "")
     end
     return table.concat(parts, "; ")

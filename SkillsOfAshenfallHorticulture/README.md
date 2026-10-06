@@ -33,6 +33,8 @@ SkillsOfAshenfallHorticulture : 1
 
 If `Binaries\Win64\ue4ss\Mods\mods.txt` names one of these mods, that line wins over `enabled.txt`: `: 0` there keeps the mod off.
 
+The folder also holds the mod's own small pak, `SoAHorticulture_P.pak`, `.ucas` and `.utoc` (about 1 MB): the stalks hybrid fruit hangs from and the Primelets' faces. The game loads it from `~mods` by itself. Keep the three files together beside `Scripts`. Without them Horticulture still works: fruit sits against the bark instead of hanging from a stalk, and the Primelets have no faces.
+
 ## Unlocking Horticulture
 
 1. Reach Historian 25 and Farming 25.
@@ -50,6 +52,8 @@ Horticulture then appears in your skills menu and on the character select screen
 5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G, or E at a grown tree). The fruit hangs at its natural size and sways with the branches. A hybrid crop adds the cutting's crop to its normal harvest. Felling a hybrid tree ends it, with a last handful.
 
 Tree cuttings need a logging axe in your hand that could fell that tree, as the game asks when you chop it: stone for ash, bronze for oak, iron for willow.
+
+Splicing also asks for the vanilla level the game itself asks to grow the plant. Trees, as cuttings or as hosts, need **Farming 20**, where the game teaches Tree Farming; crops need Farming 1. The game has no per-crop Farming level and no Woodcutting level for any tree (it gates trees by the axe), so these are the only vanilla levels involved. A greyed wheel slice or a refusal card says what is missing ("Needs Farming 20 for oak").
 
 | Horticulture | New cuttings and hosts |
 |-------------:|------------------------|
@@ -73,14 +77,17 @@ Tree cuttings need a logging axe in your hand that could fell that tree, as the 
 | Sheaf Ash | Wheat onto ash | 10 | 4 wheat a day |
 | Weeping Oak | Willow onto oak | 20 | willow and oak wood every day |
 
-Three more are waiting to be found, and every other pairing makes a hybrid of its own with a tint, a scale and a catalogue line.
+Three more are waiting to be found, and every other pairing (all 150 that open by Horticulture 25) makes a hybrid of its own with a look and a catalogue line: crops nestle among the host crop's leaves, hang from a tree's branches, and a tree cutting grows as a limb of its host. Everything grows at its natural size.
 
 ### Spoiler: the Brassica Primelet
 
 Very rarely (1.5% of the time, `primelet_chance`), a cabbage grafted onto a cabbage does not become a Doubled Cabbage. A small crowned cabbage climbs out of the plot instead, and a secret entry opens in the Discovery Catalogue.
-- **Raising it:** tend it once a day (E or G beside it). It grows from Sprout to Brassica Primelet to Prime-ling over five tended days.
-- **Moving it:** Alt+G picks it up into your satchel. Select it with Shift+G and press G to set it down wherever home is.
-- **Saving:** it is kept with your character and redrawn where you left it.
+- **Raising it:** tend it once a day (E or G beside it). It grows from Sprout to Brassica Primelet to **Mini Brassica Prime** over five tended days.
+- **Its personality:** every Primelet is born with one (Pompous, Curious, Grumpy, Dramatic, Scholarly or, now and then, Completely Unhinged) and a name to suit, which shows from the Brassica Primelet stage: "Lord Savoy the Pompous".
+- **Talking:** a Mini Brassica Prime talks. Press E beside it after tending it for the day and it answers; it also speaks up now and then when you are nearby, comments on being moved, and has views on the other Minis and on your hybrids. Lines show in a speech bubble above it. `primelet_chattiness` sets how often.
+- **Moving it:** Alt+G picks it up into your satchel. Select it with Shift+G and press G to set it down wherever home is. A Mini takes a pot the first time it is set down and keeps it.
+- **More than one:** each is raised, named and saved on its own.
+- **Saving:** it is kept with your character and redrawn where you left it. Primelets from earlier saves get their personality and name the first time they load.
 
 ## Training
 
@@ -108,7 +115,7 @@ End shows your satchel, the hybrids you have found and the **Vanilla Plants** se
 | G | Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto a plant you grew, otherwise takes a cutting |
 | Alt+G | Always takes a cutting from what you aim at |
 | Shift+G | Selects the next cutting in your satchel |
-| E | At a grown hybrid tree: picks from it, as G (trees have no E action of their own; chopping is still a swing). Beside a Brassica Primelet: tends it. Only when the game's prompt is not on something else, and never on a shoot, where the game's E destroys it |
+| E | At a grown hybrid tree: picks from it, as G (trees have no E action of their own; chopping is still a swing). Beside a Brassica Primelet: tends it, and once it has been tended today, talks to it. Only when the game's prompt is not on something else, and never on a shoot, where the game's E destroys it |
 | End | Shows Horticulture's level, XP, satchel and Discovery Catalogue, or what is still needed to unlock it. It updates while open |
 | Shift+End | Rereads the Observances of Brassica Prime |
 
@@ -121,13 +128,14 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `primelet_chance` | `1.5` | Percent of cabbage-on-cabbage grafts that become a Brassica Primelet once they take. `0` turns it off. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
 | `name_tag` | `true` | Hybrid trees always name themselves in the game's own prompt ("Tuberwood Ash" instead of "Ash Tree"). This small tag above the prompt names the Brassica Primelet you face, and any hybrid the prompt cannot name. `false` turns the tag off. |
+| `primelet_chattiness` | `normal` | How often a Mini Brassica Prime speaks up on its own: `off`, `quiet`, `normal` or `chatty`. With `off` it only answers when you talk to it or tend it. |
 | `sway` | `true` | Fruit on hybrid trees sways with the game's wind, like the leaves (the nearest 12 within 30 m). `false` keeps it still. |
 | `sway_degrees` | `0.35` | How far that fruit leans at the game's normal wind, in degrees about the trunk base (0 to 3). |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |
 
 ### Action Wheel
 
-With the optional Action Wheel mod in `~mods` (folder `ActionWheel`), hold **Z** while aiming at a plant, or with nothing aimed at, and choose:
+With the Action Wheel (part of ESL:DragonWilds once it ships there, or the standalone `ActionWheel` mod in `~mods`), hold **Z** while aiming at a plant, or with nothing aimed at, and choose. The wheel names hybrids and Primelets by their own names; while it shows names, Horticulture's small name tag stands aside.
 
 | Slice | On | Does |
 |-------|----|------|
@@ -135,7 +143,7 @@ With the optional Action Wheel mod in `~mods` (folder `ActionWheel`), hold **Z**
 | Graft › | a crop, sapling or tree you grew | A sub-wheel with one slice per cutting in your satchel; each is greyed with the reason it cannot take there ("Oak hosts need Horticulture 8") |
 | Take cutting | a crop, sapling or tree | As Alt+G. Greyed with the reason ("Hold a logging axe…", "Potato cuttings need Horticulture 5") |
 | Check graft | a plant with a graft | Shows how the graft is doing: its chance before dawn, or whether the hybrid can be picked |
-| Tend / Pick up *Primelet* | beside your Brassica Primelet | As E and Alt+G beside it |
+| Tend (or Talk to) / Pick up *Primelet* | beside your Brassica Primelet | As E and Alt+G beside it |
 | Set down *Primelet* | anywhere, with it selected | As G |
 | Next cutting, Horticulture | yourself (nothing aimed at) | As Shift+G and End |
 

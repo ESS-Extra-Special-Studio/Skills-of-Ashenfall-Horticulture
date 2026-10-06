@@ -111,6 +111,7 @@ local config = {
     sway = Settings.sway and Settings.sway_degrees > 0,
     swayDegrees = Settings.sway_degrees,
     nameTag = Settings.name_tag,
+    primeletChattiness = Settings.primelet_chattiness,
 }
 
 Book.Start(config)
@@ -144,10 +145,33 @@ local function in_world()
     return U.pc() ~= nil and ESL.Character() ~= nil
 end
 
+-- The status panel sits top left and ESL's cards top centre: lines are kept
+-- narrow enough that a card never covers the panel's right edge.
+local STATUS_WIDTH = 60
+
+local function wrap(text, width)
+    local lines, line = {}, ""
+    for word in tostring(text or ""):gmatch("%S+") do
+        if line ~= "" and #line + 1 + #word > width then
+            lines[#lines + 1] = line
+            line = "   " .. word
+        else
+            line = line == "" and word or (line .. " " .. word)
+        end
+    end
+    if line ~= "" then lines[#lines + 1] = line end
+    return table.concat(lines, "\n")
+end
+
 local function status_lines()
+    local out = { wrap(Splicing.SatchelLine(), STATUS_WIDTH) }
     local prime = Splicing.PrimeletLine()
-    return Splicing.SatchelLine() .. (prime ~= "" and ("  |  " .. prime) or "") .. "  |  " .. Splicing.CatalogueLine()
-        .. "  |  " .. Training.CatalogueLine()
+    for part in (prime .. "; "):gmatch("(.-); ") do
+        if part ~= "" then out[#out + 1] = wrap(part, STATUS_WIDTH) end
+    end
+    out[#out + 1] = wrap(Splicing.CatalogueLine(), STATUS_WIDTH)
+    out[#out + 1] = wrap(Training.CatalogueLine(), STATUS_WIDTH)
+    return table.concat(out, "\n")
 end
 
 local statusOpen = false

@@ -25,6 +25,8 @@ local FIELDS = {
       help = "How far hybrid trees' fruit leans in the game's normal wind, in degrees about the trunk base. 0 keeps it still." },
     { key = "name_tag", default = "true", kind = "bool",
       help = "true shows a small tag above the game's prompt with the name of the Brassica Primelet you face, or of a hybrid whose name the game's own prompt cannot show. Hybrid trees name themselves in the prompt either way." },
+    { key = "primelet_chattiness", default = "normal", kind = "choice", choices = { "off", "quiet", "normal", "chatty" },
+      help = "How often a grown Primelet speaks up on its own: off, quiet, normal or chatty. With off it only answers when you talk to it or tend it." },
     { key = "debug", default = "false", kind = "bool",
       help = "true writes extra detail to UE4SS.log, such as each XP payment and crop name lookup." },
 }
@@ -81,6 +83,9 @@ function Config.Load(dir, log)
         elseif field.kind == "number" then
             local n = tonumber((v and v ~= "") and v or field.default)
             if n and n >= field.min and n <= field.max then value = n end
+        elseif field.kind == "choice" then
+            local s = (v and v ~= "") and v:lower() or field.default
+            for _, c in ipairs(field.choices) do if c == s then value = s end end
         end
         if value == nil then
             if log then log("config.txt: " .. field.key .. " = " .. tostring(v) .. " is not understood; using " .. field.default) end
