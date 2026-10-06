@@ -44,7 +44,7 @@ Primelet.TEND_LINES = {
 Primelet.TENDED_TODAY = "It has had all the attention it can stand today. Come back after dawn."
 
 Primelet.GROWN = {
-    [2] = "Overnight it has unfolded a second layer of leaves and an air of quiet authority. It has opinions now, and a name to go with them.",
+    [2] = "Overnight it has grown a second layer of leaves and an air of authority. It has opinions now, and a name to match.",
     [3] = "It is a Mini Brassica Prime now. Small birds land near it, think better of it, and leave. Set it down at home and it will want a pot.",
 }
 
@@ -53,7 +53,7 @@ Primelet.REVEAL = {
     title = "BRASSICA PRIMELET",
     detail = "Cabbage onto cabbage should have made more cabbage. Instead a small cabbage has climbed out of the plot and is looking at you expectantly.",
     catalogue = "Not one of the flagships. Not, strictly, one of anything.",
-    lore = "The Observances say their lord delights in difference. Kalestix never wrote down what happens when a cabbage is introduced to itself. Perhaps he was too busy taking notes. Perhaps it was this.",
+    lore = "The Observances say their lord delights in difference. Kalestix never wrote down what happens when a cabbage is introduced to itself. Now you know.",
     howto = "Tend it once a day (E or G beside it). Alt+G picks it up; select it in the satchel and press G to set it down at home.",
 }
 

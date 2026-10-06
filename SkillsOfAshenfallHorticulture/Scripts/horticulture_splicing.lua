@@ -839,7 +839,7 @@ local function set_down(entry)
     if Primelet.Grown(p) then Chatter.Event(p, firstPot and "potted" or "placed_home") end
     if not cfg.quiet then
         if firstPot then
-            show_card("POTTED", Primelet.Name(p), "It has claimed a pot, and with it, this spot. It goes wherever you set it down from now on, pot and all.", 5)
+            show_card("POTTED", Primelet.Name(p), "It has claimed a pot. From now on, the pot comes too.", 5)
         else
             show_card("SET DOWN", Primelet.Name(p), "It surveys its new surroundings and finds them adequate.", 4)
         end

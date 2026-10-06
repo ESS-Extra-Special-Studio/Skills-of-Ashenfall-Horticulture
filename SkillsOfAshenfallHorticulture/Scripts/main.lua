@@ -81,15 +81,15 @@ ESL.RegisterSkill({
     iconFile = dir .. "\\..\\Textures\\horticulture-skill-icon.png",
     capXp = 3152,
     maxLevel = 25,
-    maxLevelText = "Horticulture 25: all v1.0.0 has to teach",
-    flavour = "Take cuttings, graft them onto the crops and trees you planted, and see what grows by dawn.",
+    maxLevelText = "Horticulture 25: more to grow in a later version",
+    flavour = "Graft a cutting onto something you planted. See what's there at dawn.",
     levelUpText = "Take cuttings and graft them onto your crops and trees to gain Horticulture XP. New hybrids pay the most.",
     panelLabel = "Progress to next level",
-    trainingText = "Aim at a plant and press " .. Settings.action_key .. " to take a cutting, then aim at a crop, sapling or tree you planted and press "
-        .. Settings.action_key .. " to graft it. At dawn the graft takes or is rejected; a graft that takes becomes a hybrid, "
-        .. "and each new hybrid enters your Discovery Catalogue. Pick from hybrid trees once a day. Crop cuttings come from your farm plots; "
-        .. "a tree only takes a prime one, from a watered, composted crop in a plot of its tier, and rests after a few picks until the next. Tree cuttings need an axe that can fell the tree, "
-        .. "and never take on a crop. Ordinary farming still pays a little.",
+    trainingText = "Aim at a plant and press " .. Settings.action_key .. " to take a cutting. Aim at a crop, sapling or tree you planted and press "
+        .. Settings.action_key .. " again to graft it. At dawn it takes or it doesn't. One that takes is a hybrid, "
+        .. "and new ones go in your Discovery Catalogue. Hybrid trees can be picked once a day. Crop cuttings come from your farm plots. "
+        .. "Trees are fussier: they only take a prime cutting, from a watered, composted crop in a plot of the right tier, and rest after a few picks. Tree cuttings need an axe that could fell the tree, "
+        .. "and won't take on a crop. Ordinary farming still pays a little.",
     requires = requires,
     perks = Perks.Rows(DEV),
 })

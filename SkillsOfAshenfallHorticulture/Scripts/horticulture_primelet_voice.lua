@@ -650,7 +650,7 @@ V.P.grumpy = {
 V.P.dramatic = {
     label  = "Dramatic",
     weight = 18,
-    trait  = "Every watering is a reunion. Every cloud is an omen. Every onion is a betrayal.",
+    trait  = "Every watering is a reunion. Every onion is a betrayal.",
     names  = { "Brassandra", "Ophelia Leafwright", "Dame Crinkle", "Savoyetta", "Lettice",
                "Valentine Leafe", "Lady Crumple" },
 
@@ -730,7 +730,7 @@ V.P.dramatic = {
     },
 
     gods = {
-        { "Saradomin did not even look down. Nine of us. Three more lightly browned. I do not forgive. I do not forget. I do occasionally forget, but then I remember again, louder.", god = "saradomin", src = "rs3" },
+        { "Saradomin did not even look down. Nine of us. I do not forgive. I do occasionally forget, but then I remember again, louder.", god = "saradomin", src = "rs3" },
         { "Guthix sat with my ancestor beneath a waterfall, by moonlight. Nobody sits with me beneath anything.", god = "guthix" },
     },
 
@@ -1200,7 +1200,7 @@ V.SHARED.ring_complete = {
     "Grow first. Questions later.",
     { "You're standing in the right place, at least.", player_in_centre = true, w = 4 },
     "The circle is willing. The gardener is weak.",
-    "Five leaves. Five roots. One gardener who isn't quite there yet.",
+    "Five leaves. Five roots. And you.",
     "Everything is in place except you.",
     "Lovely. Now go away and come back better.",
     "We'd love to. Really. You're just a bit... short.",
