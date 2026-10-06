@@ -597,6 +597,101 @@ function Splicing.Cycle()
     end
 end
 
+-- Action Wheel ------------------------------------------------------------
+-- (horticulture_wheel). The wheel offers each action on its own slice, so
+-- these run one action each, unlike G, which picks one by priority.
+
+-- What the wheel needs about the plant under the crosshair, read the way
+-- the keys read it. Game thread.
+function Splicing.WheelContext()
+    if not (U.pc() and cfg.ESL.Character()) then return { blocked = "Load into a world first", inWorld = false } end
+    if not cfg.ESL.IsUnlocked(cfg.SKILL) then
+        local text = nil
+        pcall(function()
+            local _, missing = cfg.ESL.MeetsRequirements(cfg.SKILL)
+            text = cfg.ESL.RequirementsText(missing)
+        end)
+        return { blocked = "Horticulture is locked" .. (text and text ~= "" and (": " .. text) or ""), locked = true }
+    end
+    if not World.IsServer() then return { blocked = "Splicing works in single player or as the host in this version" } end
+    if not ensure_state() then return { blocked = "Load into a world first", inWorld = false } end
+    local ctx = { st = st, level = level(), primelet = near_primelet() }
+    local c = World.Aimed()
+    if c then
+        ctx.aimed = { kind = c.kind, species = c.species, planted = c.planted }
+        if c.kind ~= "stump" then
+            ctx.src = source_of(c)
+            if c.kind ~= "wild" then
+                ctx.host = host_from(c)
+                ctx.graft = Core.GraftOn(st, as_point(c))
+            end
+        end
+    end
+    return ctx
+end
+
+local function aimed_graft()
+    local c = World.Aimed()
+    if not c or c.kind == "stump" or c.kind == "wild" then return nil, c end
+    return Core.GraftOn(st, as_point(c)), c
+end
+
+function Splicing.WheelPick()
+    if not ready() then return end
+    local ok, why = pick(aimed_graft())
+    if not ok then refuse("NOTHING TO PICK", why) end
+end
+
+function Splicing.WheelGraft(index)
+    if not ready() or not st.cuttings[index] then return end
+    st.selected = index
+    save()
+    local c = World.Aimed()
+    if not c or c.kind == "stump" or c.kind == "wild" then
+        refuse("CANNOT GRAFT", "Aim at a crop, sapling or tree you planted")
+        return
+    end
+    local ok, why = graft(c)
+    if not ok then refuse("CANNOT GRAFT", why) end
+end
+
+function Splicing.WheelTakeCutting()
+    if not ready() then return end
+    take_cutting(World.Aimed())
+end
+
+function Splicing.TendPrimelet()
+    if not ready() then return end
+    local p = near_primelet()
+    if p then tend(p) else refuse("PRIMELET", "Stand beside your Primelet") end
+end
+
+function Splicing.PickUpPrimelet()
+    if not ready() then return end
+    local p = near_primelet()
+    if p then pick_up(p) else refuse("PRIMELET", "Stand beside your Primelet") end
+end
+
+function Splicing.SetDownPrimelet()
+    if not ready() then return end
+    local sel = Core.Selected(st)
+    if sel and sel.primelet then set_down(sel) else refuse("PRIMELET", "No Primelet is selected in your satchel") end
+end
+
+function Splicing.InspectGraft()
+    if not ready() then return end
+    local g = aimed_graft()
+    if not g then refuse("NO GRAFT", "Nothing is grafted onto this plant") return end
+    -- Asked for, so shown even in quiet mode.
+    if g.state == "pending" then
+        cfg.ESL.ShowCard(cfg.SKILL, "GRAFT", Rules.Name(g.scion) .. " onto " .. Rules.Name(g.host):lower(),
+            string.format("Waiting for dawn. About %d%% it takes.", Core.ChanceFor(st, g, level())), 4)
+        return
+    end
+    local _, why = Core.CanPick(st, g)
+    cfg.ESL.ShowCard(cfg.SKILL, "HYBRID", Rules.HybridName(g.scion, g.host), why and (why .. ".") or "Ready to pick.", 4)
+end
+
 -- Status ------------------------------------------------------------------
 
 function Splicing.SatchelLine()

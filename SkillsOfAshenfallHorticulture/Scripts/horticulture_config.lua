@@ -14,7 +14,7 @@ local FIELDS = {
     { key = "status_key", default = "END", kind = "key",
       help = "Key that shows or hides the Horticulture status line and Discovery Catalogue (a UE4SS key name, such as END or NUM_ONE). Shift and this key rereads the Observances." },
     { key = "action_key", default = "G", kind = "key",
-      help = "Splicing key. Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto it when it can take it, otherwise takes a cutting. Alt and this key always takes a cutting; Shift and this key picks the next cutting in your satchel." },
+      help = "Splicing key. Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto it when it can take it, otherwise takes a cutting. Alt and this key always takes a cutting; Shift and this key picks the next cutting in your satchel. With the optional Action Wheel mod, holding its key (Z) offers the same actions on a wheel; this key keeps working." },
     { key = "primelet_chance", default = "1.5", kind = "number", min = 0, max = 100,
       help = "Percent chance that a cabbage grafted onto a cabbage, once it takes, becomes something else entirely. 0 turns it off." },
     { key = "quiet", default = "false", kind = "bool",

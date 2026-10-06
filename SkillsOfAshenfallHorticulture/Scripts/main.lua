@@ -141,7 +141,7 @@ local function in_world()
     return U.pc() ~= nil and ESL.Character() ~= nil
 end
 
-RegisterKeyBindAsync(Key[STATUS_KEY], {}, function()
+local function toggle_status()
     if not in_world() then log("Load into a world first") return end
     if not ESL.IsUnlocked(SKILL) then
         ESL.Gate(SKILL, { notify = true, title = "Horticulture", skill = SKILL })
@@ -152,7 +152,13 @@ RegisterKeyBindAsync(Key[STATUS_KEY], {}, function()
         return Splicing.SatchelLine() .. (prime ~= "" and ("  |  " .. prime) or "") .. "  |  " .. Splicing.CatalogueLine()
             .. "  |  " .. Training.CatalogueLine()
     end)
-end)
+end
+
+RegisterKeyBindAsync(Key[STATUS_KEY], {}, toggle_status)
+
+-- Optional companion: the Action Wheel (hold Z) shows the same actions.
+local okWheel, onWheel = pcall(function() return require("horticulture_wheel").Start(Splicing, dir, toggle_status) end)
+local WHEEL = okWheel and onWheel == true
 
 RegisterKeyBindAsync(Key[STATUS_KEY], { ModifierKey.SHIFT }, function()
     Book.Reread()
@@ -171,5 +177,6 @@ end
 
 log("Loaded " .. VERSION .. ". " .. STATUS_KEY .. " shows Horticulture, Shift+" .. STATUS_KEY
     .. " rereads the Observances, " .. Settings.action_key .. " takes cuttings and grafts (Alt+" .. Settings.action_key
-    .. " cutting only, Shift+" .. Settings.action_key .. " next cutting)." .. (Settings.quiet and " Quiet mode is on." or "")
+    .. " cutting only, Shift+" .. Settings.action_key .. " next cutting)."
+    .. (WHEEL and " The same actions are on the Action Wheel." or "") .. (Settings.quiet and " Quiet mode is on." or "")
     .. (DEV and " Developer keys on." or ""))

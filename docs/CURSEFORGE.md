@@ -34,6 +34,7 @@ To uninstall, remove Horticulture in the CurseForge app (or delete its folder). 
 
 - **Required Dependency:** ESL:DragonWilds 1.0.0 or later.
 - **Required Dependency:** Skills of Ashenfall: Historian 1.0.0 or later.
+- **Optional Dependency:** Action Wheel 1.0.0 or later. Hold Z to choose Horticulture's actions from a radial menu (pick, graft with a cutting sub-wheel, take a cutting, check a graft, tend, pick up and set down the Primelet); greyed slices say why, such as "Oak cuttings need Horticulture 8". Everything still works on G without it.
 - **Not on CurseForge:** UE4SS for RuneScape: Dragonwilds (see Install).
 
 ## Lore and affiliation

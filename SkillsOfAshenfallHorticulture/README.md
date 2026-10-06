@@ -10,6 +10,8 @@ Horticulture is the second Skills of Ashenfall skill. It is hidden until you ear
 - Skills of Ashenfall: Historian 1.0.0 or later (Required Dependency)
 - UE4SS for RuneScape: Dragonwilds (3.0.1, the "UE4SS Steam (latest)" build)
 
+Recommended companion: **Action Wheel** 1.0.0 or later (Optional Dependency). With it installed beside this mod, hold Z to choose Horticulture's actions from a wheel; see [Action Wheel](#action-wheel). Horticulture works the same without it.
+
 ## Install
 
 Put the `SkillsOfAshenfallHorticulture` folder in the game's `~mods` folder, beside `ESLDragonWilds` and `SkillsOfAshenfallHistorian`:
@@ -119,6 +121,22 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `primelet_chance` | `1.5` | Percent of cabbage-on-cabbage grafts that become a Brassica Primelet once they take. `0` turns it off. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |
+
+### Action Wheel
+
+With the optional Action Wheel mod in `~mods` (folder `ActionWheel`), hold **Z** while aiming at a plant, or with nothing aimed at, and choose:
+
+| Slice | On | Does |
+|-------|----|------|
+| Pick *hybrid* | a hybrid tree or sapling | As G. Greyed with the reason when it cannot be picked ("Already picked today. More after dawn") |
+| Graft › | a crop, sapling or tree you grew | A sub-wheel with one slice per cutting in your satchel; each is greyed with the reason it cannot take there ("Oak hosts need Horticulture 8") |
+| Take cutting | a crop, sapling or tree | As Alt+G. Greyed with the reason ("Hold a logging axe…", "Potato cuttings need Horticulture 5") |
+| Check graft | a plant with a graft | Shows how the graft is doing: its chance before dawn, or whether the hybrid can be picked |
+| Tend / Pick up *Primelet* | beside your Brassica Primelet | As E and Alt+G beside it |
+| Set down *Primelet* | anywhere, with it selected | As G |
+| Next cutting, Horticulture | yourself (nothing aimed at) | As Shift+G and End |
+
+Before Horticulture is unlocked, Take cutting shows greyed with what is still needed, and the Horticulture slice shows the same list. G, Alt+G, Shift+G, E and End keep working with the wheel installed.
 
 End was chosen because F10 opens the console with ConsoleEnabler, Home belongs to the ESL example skill, and F5 to F9 are taken by Historian and the HUD mod.
 

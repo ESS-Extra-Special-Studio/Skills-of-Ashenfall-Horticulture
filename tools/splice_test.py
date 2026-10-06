@@ -1,4 +1,4 @@
-﻿"""Offline tests for splicing: rules, the satchel save, the cut/graft/dawn
+"""Offline tests for splicing: rules, the satchel save, the cut/graft/dawn
 loop, the world helpers, hybrid layouts, and horticulture_splicing.lua
 driven with a fake world and ESL.
 
@@ -879,6 +879,114 @@ for _ in range(6):
 check("seeded graft becomes a Primelet ahead of the player", "hybrid:BrassicaPrimelet=200" in g.take("awards"))
 ap = g.take("applied")
 check("seeded Primelet two metres ahead", "prime:p" in ap and ":200,0," in ap, ap)
+
+# Action Wheel (optional companion) ----------------------------------------
+WHEEL = r"""
+local tmp = ...
+local Wheel = require("horticulture_wheel")
+noWheel = Wheel.Start(S, tmp .. "\\nowhere", function() end)
+local W = require("horticulture_world")
+W.Facing = function() return { X = 0, Y = 0, Z = 0 }, 0 end
+W.WorldKey = function() return "w" end
+statusRuns = 0
+package.loaded["actionwheel"] = { Register = function(def) def_ = def return true end }
+withWheel = Wheel.Start(S, tmp, function() statusRuns = statusRuns + 1 end)
+function act(id) for _, a in ipairs(def_.actions) do if a.id == id then return a end end end
+function view(id)
+    local r = act(id).check({ kind = "tree" })
+    if r == nil then return "hidden" end
+    return (r.enabled and "on" or "off") .. (r.locked and " locked" or "") .. (r.label and (" " .. r.label) or "") .. (r.reason and (" | " .. r.reason) or "")
+end
+function kids(id)
+    local out = {}
+    for _, k in ipairs(act(id).children({ kind = "tree" })) do
+        out[#out + 1] = k.label .. (k.enabled and " on" or " off") .. (k.reason and (" | " .. k.reason) or "")
+    end
+    return table.concat(out, " ; ")
+end
+function run(id, kind) act(id).run({ kind = kind }) tick() end
+function choose(id, value) act(id).run({ kind = "tree" }, { value = value }) tick() end
+function ids() local out = {} for _, a in ipairs(def_.actions) do out[#out + 1] = a.id end return table.concat(out, ",") end
+"""
+os.remove(save) if os.path.exists(save) else None
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+L.execute(WHEEL, TMP)
+g = L.globals()
+check("wheel: without ActionWheel, Start returns false and the keys stay as they are",
+      g.noWheel is False and sorted(str(k) for k in g.binds.keys()) == ["ALT+G", "E", "G", "SHIFT+G"], g.noWheel)
+check("wheel: with ActionWheel, Horticulture registers its slices",
+      g.withWheel is True and g.ids() == "pick,graft,take_cutting,inspect,tend,pick_up,set_down,next_cutting,status", g.ids())
+
+potato = g.plot("FPD_Potato", 1, 50)
+ash = g.tree("Ash", True, 300, "sapling")
+oak = g.tree("Oak", True, 600)
+g.nearby = L.table_from([potato, ash, oak])
+g.aimed = potato
+g.level = 1
+v = g.view("take_cutting")
+check("wheel: Take cutting greyed and locked by level, with the rule's reason", v == "off locked | Potato cuttings need Horticulture 5", v)
+check("wheel: Graft hidden with an empty satchel; Pick hidden without a hybrid", g.view("graft") == "hidden" and g.view("pick") == "hidden")
+g.level = 5
+check("wheel: Take cutting on at Horticulture 5", g.view("take_cutting") == "on", g.view("take_cutting"))
+g.run("take_cutting", "crop")
+check("wheel: Take cutting runs the same cutting as Alt+G", "Cutting taken=8" in g.take("xp"))
+v = g.view("take_cutting")
+check("wheel: one cutting per plant per day, greyed with the reason", v == "off | You already took a cutting from this plant today", v)
+g.aimed = oak
+v = g.view("graft")
+check("wheel: Graft greyed when every cutting is refused for the same reason (level gate)", v == "off locked | Oak hosts need Horticulture 8", v)
+g.aimed = ash
+check("wheel: Graft on a planted ash with a potato cutting", g.view("graft") == "on" and g.kids("graft") == "Potato cutting on", g.kids("graft"))
+check("wheel: Check graft hidden before a graft", g.view("inspect") == "hidden")
+g.choose("graft", 1)
+x = g.take("xp")
+check("wheel: choosing the cutting grafts it", "Graft made=20" in x, x)
+g.take("cards")
+check("wheel: Check graft offered once grafted", g.view("inspect") == "on")
+g.run("inspect", "sapling")
+c = g.take("cards")
+check("wheel: Check graft shows the chance before dawn", "GRAFT|Potato onto ash|Waiting for dawn. About 100% it takes." in c, c)
+g.S.Dawn("test")
+for _ in range(4):
+    g.tick()
+g.take("cards"); g.take("xp"); g.take("awards")
+v = g.view("pick")
+check("wheel: Pick names the hybrid", v == "on Pick Tuberwood Ash", v)
+g.run("pick", "sapling")
+check("wheel: Pick gives the same produce as G", "ITEM_Resources_Potatox3" in g.take("given"))
+v = g.view("pick")
+check("wheel: picked today, greyed with the reason", v == "off Pick Tuberwood Ash | Already picked today. More after dawn", v)
+
+# Primelet slices, on the self wheel as well.
+L.execute('local P = require("horticulture_primelet") local st = S.State() P.New(st, 60, 0, 0, "w") S.Save()')
+v = g.view("tend")
+check("wheel: Tend offered beside a Primelet, by its stage name", v.startswith("on Tend "), v)
+check("wheel: Primelet slices go on every wheel, including the self wheel", "all" in list(g.act("tend").kinds.values()))
+g.run("tend", "self")
+c = g.take("cards")
+check("wheel: Tend tends (once a day)", "TENDED|" in c, c)
+check("wheel: tended today, greyed", g.view("tend").endswith("| Already tended today. Again after dawn"), g.view("tend"))
+g.run("pick_up", "self")
+c = g.take("cards")
+check("wheel: Pick up puts it in the satchel", "PICKED UP|" in c, c)
+v = g.view("set_down")
+check("wheel: carrying it, Set down appears and Graft hides", v.startswith("on Set down ") and g.view("graft") == "hidden", v)
+check("wheel: Next cutting hidden with one thing in the satchel", g.view("next_cutting") == "hidden")
+g.axe = 1
+g.run("take_cutting", "sapling")
+g.take("cards"); g.take("xp")
+check("wheel: Next cutting on the self wheel with two things in the satchel", g.view("next_cutting") == "on")
+g.run("next_cutting", "self")
+c = g.take("cards")
+check("wheel: Next cutting runs Shift+G's cycle", "SELECTED|Primelet Sprout|1 of 2" in c, c)
+g.run("status", "self")
+check("wheel: Horticulture slice runs the status key's function", g.statusRuns == 1, g.statusRuns)
+
+g.unlocked = False
+check("wheel: locked skill: Take cutting greyed and locked, the rest hidden",
+      g.view("take_cutting").startswith("off locked | Horticulture is locked") and g.view("pick") == "hidden"
+      and g.view("graft") == "hidden" and g.view("tend") == "hidden" and g.view("status") == "on", g.view("take_cutting"))
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):

@@ -53,16 +53,22 @@ end
 
 -- src: { species, kind, key, level, axePower, alive }. Returns the cutting,
 -- or nil and the reason.
-function Core.TakeCutting(st, src)
-    if src.species == Primelet.SPECIES then return nil, "You will not take a cutting from a minor miracle. Alt+G picks it up" end
+function Core.CanTakeCutting(st, src)
+    if src.species == Primelet.SPECIES then return false, "You will not take a cutting from a minor miracle. Alt+G picks it up" end
     local ok, why = Rules.CanCut(src)
-    if not ok then return nil, why end
+    if not ok then return false, why end
     if #st.cuttings >= Rules.SATCHEL_SIZE then
-        return nil, string.format("Your cutting satchel is full (%d). Graft one first", Rules.SATCHEL_SIZE)
+        return false, string.format("Your cutting satchel is full (%d). Graft one first", Rules.SATCHEL_SIZE)
     end
     if src.key and st.sources[src.key] == st.dawn then
-        return nil, "You already took a cutting from this plant today"
+        return false, "You already took a cutting from this plant today"
     end
+    return true
+end
+
+function Core.TakeCutting(st, src)
+    local ok, why = Core.CanTakeCutting(st, src)
+    if not ok then return nil, why end
     local c = { species = src.species, taken = st.dawn }
     st.cuttings[#st.cuttings + 1] = c
     st.selected = #st.cuttings
@@ -72,23 +78,28 @@ end
 
 -- host: { species, kind, key, planted, stage, tier, x, y, z, bonus, world }.
 -- Returns the graft, or nil and the reason.
-function Core.Graft(st, host, level)
+-- Whether cutting c (default: the selected one) can be grafted onto host.
+function Core.CanGraft(st, host, level, c)
+    c = c or Core.Selected(st)
     local existing = Core.GraftOn(st, host)
     if existing then
-        if existing.state == "pending" then return nil, "Already grafted. Come back after dawn" end
-        local c = Core.Selected(st)
+        if existing.state == "pending" then return false, "Already grafted. Come back after dawn" end
         local why = "This is already a " .. Rules.PlantsName(existing.plants)
         if c and not c.primelet and Rules.MaxPlants(level) > #existing.plants then
             local ok, refuse = Rules.CanAddTo(existing.plants, c.species, host, level)
             if not ok then why = refuse end
         end
-        return nil, why
+        return false, why
     end
-    local c = Core.Selected(st)
-    if not c then return nil, "Your satchel is empty. Take a cutting first" end
-    if c.primelet then return nil, "Set the Primelet down first (G on open ground)" end
-    local ok, why = Rules.CanGraft(c.species, host, level)
+    if not c then return false, "Your satchel is empty. Take a cutting first" end
+    if c.primelet then return false, "Set the Primelet down first (G on open ground)" end
+    return Rules.CanGraft(c.species, host, level)
+end
+
+function Core.Graft(st, host, level)
+    local ok, why = Core.CanGraft(st, host, level)
     if not ok then return nil, why end
+    local c = Core.Selected(st)
     table.remove(st.cuttings, st.selected)
     if st.selected > #st.cuttings then st.selected = math.max(1, #st.cuttings) end
     local g = Store.SetPlants({
