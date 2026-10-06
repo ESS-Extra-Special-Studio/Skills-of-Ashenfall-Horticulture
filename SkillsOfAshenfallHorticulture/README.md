@@ -47,7 +47,7 @@ Horticulture then appears in your skills menu and on the character select screen
 2. **Graft it.** Aim at a crop, sapling or tree **you planted** and press **G** again. Crop cuttings take on crops and on trees; tree cuttings take on trees, never on a crop. A plant cannot take a graft of its own kind, except cabbage, which the Brassicans thought worth trying.
 3. **Wait for dawn.** At 06:00 in game (sleeping through it counts) the graft takes or is rejected. Your first graft always takes; after that the chance is about 60%, better the further you are above the cutting's level and worse when a crop is grafted onto a weaker host.
 4. **The hybrid.** A graft that takes changes the plant you can see, and the first of each pairing enters your **Discovery Catalogue**.
-5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G). A hybrid crop adds the cutting's crop to its normal harvest. Felling a hybrid tree ends it, with a last handful.
+5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G, or E at a grown tree). The fruit hangs at its natural size and sways with the branches. A hybrid crop adds the cutting's crop to its normal harvest. Felling a hybrid tree ends it, with a last handful.
 
 Tree cuttings need a logging axe in your hand that could fell that tree, as the game asks when you chop it: stone for ash, bronze for oak, iron for willow.
 
@@ -108,8 +108,8 @@ End shows your satchel, the hybrids you have found and the **Vanilla Plants** se
 | G | Aim at a plant: picks from a hybrid when it is ready, grafts your selected cutting onto a plant you grew, otherwise takes a cutting |
 | Alt+G | Always takes a cutting from what you aim at |
 | Shift+G | Selects the next cutting in your satchel |
-| E | Beside a Brassica Primelet: tends it (the game's own interact key; only when the game's prompt is not on something else) |
-| End | Shows Horticulture's level, XP, satchel and Discovery Catalogue, or what is still needed to unlock it |
+| E | At a grown hybrid tree: picks from it, as G (trees have no E action of their own; chopping is still a swing). Beside a Brassica Primelet: tends it. Only when the game's prompt is not on something else, and never on a shoot, where the game's E destroys it |
+| End | Shows Horticulture's level, XP, satchel and Discovery Catalogue, or what is still needed to unlock it. It updates while open |
 | Shift+End | Rereads the Observances of Brassica Prime |
 
 The first run writes `config.txt` next to `enabled.txt`:
@@ -120,6 +120,9 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `action_key` | `G` | The splicing key, by its UE4SS key name. Alt and Shift with it take a cutting and select the next one. |
 | `primelet_chance` | `1.5` | Percent of cabbage-on-cabbage grafts that become a Brassica Primelet once they take. `0` turns it off. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
+| `name_tag` | `true` | Looking at a hybrid, a small tag above the game's prompt names it ("Tuberwood Ash" over the game's "Ash Tree"); facing the Brassica Primelet, it names the Primelet. `false` turns the tag off. |
+| `sway` | `true` | Fruit on hybrid trees sways with the game's wind, like the leaves (the nearest 12 within 30 m). `false` keeps it still. |
+| `sway_degrees` | `0.35` | How far that fruit leans at the game's normal wind, in degrees about the trunk base (0 to 3). |
 | `debug` | `false` | `true` writes every XP award to the UE4SS log. |
 
 ### Action Wheel

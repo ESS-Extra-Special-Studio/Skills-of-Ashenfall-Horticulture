@@ -461,6 +461,9 @@ lay = L.eval(r"""function()
     local low = true
     for _, piece in ipairs(tub) do if piece.z < 300 then low = false end end
     out[#out + 1] = "tuberhigh=" .. tostring(low)
+    local big = 0
+    for _, piece in ipairs(tub) do big = math.max(big, piece.scale) end
+    out[#out + 1] = string.format("fruitmax=%.2f", big)
     local o = Looks.ParseOverrides("# c\nTuberwoodAsh = /Game/Mods/X/SM_T\nBrassicaOak=/Game/A/B.B\n")
     out[#out + 1] = o.TuberwoodAsh .. " " .. o.BrassicaOak
     out[#out + 1] = Looks.PACKAGED.TuberwoodAsh
@@ -469,6 +472,7 @@ end""")()
 check("layouts for the flagships", all(s in lay for s in ["TuberwoodAsh=12", "BrassicaOak=10", "SheafAsh=12", "WeepingOak=2", "BambleNone=4"]) and "!" not in lay, lay)
 check("Brassitato crowns the potato with a cabbage", "Brassitato=1:cabbage" in lay, lay)
 check("built-in Tuberwood potatoes hang in the canopy", "tuberhigh=true" in lay, lay)
+check("built-in layouts clamp fruit to 1.1", "fruitmax=1.10" in lay, lay)
 check("meshes.txt overrides", "/Game/Mods/X/SM_T.SM_T /Game/A/B.B" in lay, lay)
 att = L.eval(r"""function()
     local Looks = require("horticulture_looks")
@@ -533,8 +537,36 @@ pl = L.eval(r"""function(scripts)
     local capped = P.Pieces(shape, { havePak = false, cap = 40 })
     local ground = 0
     for _, p in ipairs(capped) do if p.group == "ground_fruit" then ground = ground + 1 end end
-    local high = 0
-    for _, p in ipairs(free) do if p.group == "canopy_fruit" and p.z > 600 then high = high + 1 end end
+    local high, groundFree, maxFruit = 0, 0, 0
+    for _, p in ipairs(free) do
+        if p.group == "canopy_fruit" and p.z > 600 then high = high + 1 end
+        if p.group == "ground_fruit" then groundFree = groundFree + 1 end
+        if P.IsFruit(p.group, p.path) then maxFruit = math.max(maxFruit, p.scale, p.scaleY, p.scaleZ) end
+    end
+    out[#out + 1] = string.format("fruit %d %.3f %s %s", groundFree, maxFruit, tostring(P.Skipped("Fallen_Fruit")), tostring(P.Skipped("canopy_fruit")))
+    -- The safety net on old-style data: ground fruit dropped, giant fruit clamped,
+    -- natural wheat (a whole plant mesh at half scale) left alone.
+    local fake = { attachments = {
+        { mesh = "/Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01", group = "ground_fruit", scale = { 1, 1, 1 } },
+        { mesh = "/Game/Art/Item/Resources/Potato/SM_Potato_Fruit_01", group = "canopy_fruit", scale = { 2.8, 2.8, 2.8 } },
+        { mesh = "/Game/Art/Item/Resources/Wheat/SM_Wheat_01", group = "canopy_fruit", scale = { 0.5, 0.5, 0.55 } },
+        { mesh = "/Game/Art/Item/Resources/Wheat/SM_Wheat_01", group = "canopy_fruit", scale = { 1.4, 1.4, 1.4 } },
+        { mesh = "/Game/Mods/SoAHorticulture/Hybrids/SM_HYB_FruitStem_01", group = "canopy_stem", scale = { 1, 1, 1.6 } },
+    } }
+    local fp = P.Pieces(fake, { havePak = true })
+    out[#out + 1] = string.format("safety %d %.2f %.2f/%.2f %.2f %.2f", #fp, fp[1].scale, fp[2].scale, fp[2].scaleZ, fp[3].scale, fp[4].scaleZ)
+    local sheaf = P.Load(scripts, "SheafAsh")
+    local wmin, wmax = 9, 0
+    for _, sh in pairs(sheaf.shapes) do
+        for _, p in ipairs(P.Pieces(sh, { havePak = true })) do
+            if p.path:find("SM_Wheat_", 1, true) then wmin, wmax = math.min(wmin, p.scale), math.max(wmax, p.scale) end
+        end
+    end
+    local raw = 0
+    for _, sh in pairs(sheaf.shapes) do
+        for _, a in ipairs(sh.attachments) do if a.mesh:find("SM_Wheat_", 1, true) then raw = math.max(raw, a.scale[1]) end end
+    end
+    out[#out + 1] = string.format("wheat %.2f %.2f %s", wmin, wmax, tostring(math.abs(raw - wmax) < 1e-9))
     out[#out + 1] = string.format("tub %s %s all %d free %d capped %d ground %d high %d", key:match("[^/]+$"), name, all, #free, #capped, ground, high)
     out[#out + 1] = "none=" .. tostring(P.Shape(d, "/Game/Art/X/SM_Unknown") == nil) .. " " .. tostring(P.Load(scripts, "TwoBarkAsh") == nil)
     local q = P.Quat(10, 30, -20)
@@ -550,12 +582,15 @@ end""")(SCRIPTS).split("\n")
 for line, want in zip(pl[:5], ["TuberwoodAsh=9 hosts 0 bad 0", "BrassicaOak=6 hosts 0 bad 0", "SheafAsh=9 hosts 0 bad 0",
                                "Brassitato=3 hosts 0 bad 0", "WeepingOak=6 hosts 0 bad 0"]):
     check("placement data: " + want.split("=")[0] + " covers every host with vanilla meshes only", line.startswith(want) and line.endswith(" 0 nonvanilla"), line)
-check("host picked by mesh path; stalks need the pak; cap drops fallen fruit first", pl[5].startswith("tub SM_FH_Ash_Tree_02 shape_1 all 132 free 104 capped 40 ground 0"), pl[5])
-check("Tuberwood potatoes hang in the canopy (most above 6 m)", int(pl[5].split("high ")[1]) >= 40, pl[5])
-check("unknown host or hybrid: no placement data", pl[6] == "none=true true", pl[6])
-check("rotator <-> quaternion round trip", pl[7] == "rot 10.00 30.00 -20.00", pl[7])
-check("world transform on a turned, scaled host", pl[8] == "world 1000 2150 75 yaw 100 scale 3.0", pl[8])
-check("instance transform: unit quaternion and location", pl[9].startswith("xf 1.000 "), pl[9])
+check("host picked by mesh path; stalks need the pak; cap respected", pl[8].startswith("tub SM_FH_Ash_Tree_02 shape_1 all 148 free 106 capped 40 ground 0"), pl[8])
+check("loader safety net: ground fruit skipped, giant fruit clamped (2.8 -> 1.1), natural wheat untouched, oversized wheat to 0.6, stems unclamped", pl[6] == "safety 4 1.10 0.50/0.55 0.60 1.60", pl[6])
+check("Sheaf Ash v003 wheat (0.45-0.55, a whole plant mesh) passes the clamp unchanged", pl[7].endswith(" true") and pl[7].startswith("wheat 0.4"), pl[7])
+check("ground/fallen fruit groups are never placed; fruit scale clamped to 1.1", pl[5].startswith("fruit 0 1.0") and pl[5].endswith(" true false"), pl[5])
+check("Tuberwood potatoes hang in the canopy (most above 6 m)", int(pl[8].split("high ")[1]) >= 40, pl[8])
+check("unknown host or hybrid: no placement data", pl[9] == "none=true true", pl[9])
+check("rotator <-> quaternion round trip", pl[10] == "rot 10.00 30.00 -20.00", pl[10])
+check("world transform on a turned, scaled host", pl[11] == "world 1000 2150 75 yaw 100 scale 3.0", pl[11])
+check("instance transform: unit quaternion and location", pl[12].startswith("xf 1.000 "), pl[12])
 
 # Newest placement version, material overrides
 vdir = os.path.join(TMP, "vers")
@@ -616,7 +651,7 @@ mo = L.eval(r"""function(scripts, vdir)
     out[#out + 1] = "broken " .. tostring(ok)
     return table.concat(out, "\n")
 end""")(SCRIPTS, vdir).split("\n")
-check("newest shipped versions are used (Brassitato stays v001)", mo[0] == "files v007 v002 v002 v001 v002", mo[0])
+check("newest shipped versions are used (Brassitato stays v001)", mo[0] == "files v008 v003 v003 v001 v002", mo[0])
 check("loader takes the newest file that loads (a broken newer one is skipped)", mo[1] == "pick new nil", mo[1])
 check("instanced cap keeps every pak-free Tuberwood piece on all three shapes", mo[2] == "ismcap 3", mo[2])
 check("Weeping Oak overrides reach the pieces (one instanced component per tree)", mo[3].startswith("willow 2 piece(s) 1 key(s) slot 0 Color_Mult_A 1.15 1.45 0.20 1 scalars Color_Mult_Blend=1.00 Subsurface Amount scale=0.35 none=''"), mo[3])
@@ -643,6 +678,10 @@ W.Nearby = function() return nearby end
 W.HeldAxe = function() return axe end
 W.Hour = function() return hour end
 W.IsServer = function() return true end
+promptHost, promptTarget, tagShown = nil, nil, {}
+W.PromptHost = function() return promptHost end
+W.PromptTarget = function() return promptTarget end
+package.loaded["horticulture_nametag"] = { Show = function(t) tagShown[#tagShown + 1] = tostring(t) end }
 W.Give = function(item, n) given[#given + 1] = item:match("([^/]+)$") .. "x" .. n return true end
 local Looks = require("horticulture_looks")
 Looks.Init = function() end
@@ -683,7 +722,7 @@ potato = g.plot("FPD_Potato", 1, 50)
 ash = g.tree("Ash", True, 300, "sapling")
 g.nearby = L.table_from([potato, ash])
 bound = sorted(str(k) for k in g.binds.keys())
-check("splicing keys are G, Alt+G, Shift+G and E (Primelet); none on Ctrl (the game's Evade)",
+check("splicing keys are G, Alt+G, Shift+G and E (pick, Primelet); none on Ctrl (the game's Evade)",
       bound == ["ALT+G", "E", "G", "SHIFT+G"], bound)
 
 g.aimed = potato
@@ -724,8 +763,27 @@ check("picking pays 25", "Hybrid picked=25" in x, x)
 g.press("G")
 c = g.take("cards")
 check("second pick the same day refused", "Already picked today" in c, c)
+ash.kind = "sapling"
+g.press("E")
+c = g.take("cards")
+check("E on a hybrid shoot does nothing (the game's E destroys shoots)", c == "", c)
+ash.kind = "tree"
+g.press("E")
+c = g.take("cards")
+check("E on a grown hybrid tree picks too (here: already picked today)", "NOTHING TO PICK|Already picked today" in c, c)
+ash.kind = "sapling"
 cat = g.S.CatalogueLine()
 check("catalogue line", cat == "Hybrids (1/8 flagship): Tuberwood Ash", cat)
+g.promptHost = ash
+g.tagShown = L.table()
+g.tick()
+check("name tag: Tuberwood Ash over the game's prompt on the hybrid", g.S.TagText() == "Tuberwood Ash" and "Tuberwood Ash" in list(g.tagShown.values()), list(g.tagShown.values()))
+g.promptHost = g.tree("Ash", False, 5000)
+check("name tag: none on an ordinary ash", g.S.TagText() is None, g.S.TagText())
+g.promptHost = None
+g.promptTarget = L.table()
+check("name tag: none while the prompt is on something else", g.S.TagText() is None, g.S.TagText())
+g.promptTarget = None
 
 # A tree cutting never goes onto a crop; Alt+G cuts; axe gating.
 g.aimed = g.tree("Ash", False, 900)
@@ -987,6 +1045,166 @@ g.unlocked = False
 check("wheel: locked skill: Take cutting greyed and locked, the rest hidden",
       g.view("take_cutting").startswith("off locked | Horticulture is locked") and g.view("pick") == "hidden"
       and g.view("graft") == "hidden" and g.view("tend") == "hidden" and g.view("status") == "on", g.view("take_cutting"))
+
+# Wind sway (ported from DragonwildsAssets scripts/lua/test_hybrid_sway.lua) ----
+L = fresh()
+sw = L.eval(r"""function()
+    local S = require("horticulture_sway")
+    local P = require("horticulture_placements")
+    local cfg = setmetatable({}, { __index = S.defaults })
+    local out, fails = {}, {}
+    local function check(ok, msg) if not ok then fails[#fails + 1] = msg end end
+    local function zaxis(p, r)
+        p, r = math.rad(p), math.rad(r)
+        return -math.cos(r) * math.sin(p), math.sin(r), math.cos(r) * math.cos(p)
+    end
+    for _, d in ipairs({ { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 }, { 0.7, 0.7 } }) do
+        local sx, sy = 0, 0
+        for t = 0, 7, 0.05 do
+            local p, r = S.tilt(cfg, t, { X = d[1], Y = d[2] }, 20, { X = 1234, Y = -567 })
+            local x, y = zaxis(p, r)
+            sx, sy = sx + x, sy + y
+            check(math.abs(p) <= cfg.max_deg + 1e-9 and math.abs(r) <= cfg.max_deg + 1e-9, "within max_deg")
+        end
+        check(sx * d[1] + sy * d[2] > 0, ("downwind %g,%g"):format(d[1], d[2]))
+    end
+    local p, r = S.tilt(cfg, 1, { X = 0, Y = 0 }, 20, { X = 0, Y = 0 })
+    check(p == 0 and r == 0, "zero direction upright")
+    p, r = S.tilt(cfg, 1, { X = 1, Y = 0 }, 0, { X = 0, Y = 0 })
+    check(p == 0 and r == 0, "zero intensity upright")
+    local peak = 0
+    for t = 0, 7, 0.01 do
+        local a, b = S.tilt(cfg, t, { X = 1, Y = 0 }, 500, { X = 0, Y = 0 })
+        peak = math.max(peak, math.sqrt(a * a + b * b))
+    end
+    check(peak <= cfg.max_deg * 1.05 + 1e-9, "storm capped " .. peak)
+    local l = S.to_local({ X = 1, Y = 0 }, 90)
+    check(math.abs(l.X) < 1e-9 and math.abs(l.Y + 1) < 1e-9, "to_local yaw 90")
+    out[#out + 1] = "maths " .. (#fails == 0 and "ok" or table.concat(fails, "; "))
+
+    -- Glue: distance gate, budget cap, parking, gone trees dropped, calm fallback.
+    local clock, applied, gone = 0, {}, {}
+    local dir = { X = 1, Y = 0 }
+    local s = S.new({ max_trees = 3 }, {
+        clock = function() return clock end,
+        wind = function() return dir, 20 end,
+        player = function() return { X = 0, Y = 0 } end,
+        apply = function(tree, pp, rr) if gone[tree.id] then return false end applied[tree.id] = { pp, rr } return true end,
+    })
+    local trees = {}
+    for k = 1, 6 do trees[k] = { id = k } s:add(k, trees[k], { X = k * 400, Y = 0, Yaw = 0 }) end
+    local n = s:tick()
+    out[#out + 1] = string.format("budget %d %s %s", n, tostring(applied[1] ~= nil and applied[3] ~= nil), tostring(applied[4] == nil))
+    s.trees[1].pos.X = 99999
+    applied = {}
+    s:tick()
+    out[#out + 1] = "parked " .. tostring(applied[1] and applied[1][1] == 0 and applied[1][2] == 0)
+        .. " " .. tostring(applied[4] ~= nil and applied[4][1] ~= 0)
+    s.trees[5].pos.X = 100
+    applied = {}
+    s:tick()
+    out[#out + 1] = "budget-parked " .. tostring(applied[4] and applied[4][1] == 0 and applied[4][2] == 0)
+    s.trees[5].pos.X = 2000
+    gone[2] = true
+    s:tick()
+    out[#out + 1] = "gone " .. tostring(s.trees[2] == nil) .. " " .. s:count()
+    dir = { X = 0, Y = 0 }
+    applied = {}
+    s:tick()
+    local moved = false
+    for _, a in pairs(applied) do if a[1] ~= 0 or a[2] ~= 0 then moved = true end end
+    out[#out + 1] = "calm " .. tostring(s.calm) .. " " .. tostring(moved)
+    local nowind = S.new({}, { clock = function() return 0 end, wind = function() return nil end,
+        player = function() return { X = 0, Y = 0 } end, apply = function() error("must not be called") end })
+    nowind:add(1, {}, { X = 0, Y = 0, Yaw = 0 })
+    out[#out + 1] = "nowind " .. nowind:tick()
+
+    -- The anchor's rotation: the host's rotation, then the tilt in its frame.
+    local rot = P.Rotator(P.QuatMul(P.Quat(0, 90, 0), P.Quat(0.5, 0, 0)))
+    out[#out + 1] = string.format("compose %.2f %.2f %.2f", rot.Pitch, rot.Yaw, rot.Roll)
+    -- Fruit at 6 m moves about 3.7 cm at the default 0.35 degrees.
+    out[#out + 1] = string.format("reach %.1f", 600 * math.rad(S.defaults.base_deg))
+    local t0, N = os.clock(), 20000
+    for k = 1, N do S.tilt(cfg, k * 0.001, S.to_local({ X = 0.6, Y = 0.8 }, k % 360), 20, { X = k, Y = -k }) end
+    out[#out + 1] = string.format("cost %.2f", (os.clock() - t0) / N * 1e6)
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("sway maths: leans downwind every way, upright when calm or still, storm capped, host yaw", sw[0] == "maths ok", sw[0])
+check("sway: nearest 3 within 30 m updated (budget cap)", sw[1] == "budget 3 true true", sw[1])
+check("sway: a tree walked out of range is parked upright; the next nearest takes its place", sw[2] == "parked true true", sw[2])
+check("sway: a tree pushed past the budget is parked upright, not frozen", sw[3] == "budget-parked true", sw[3])
+check("sway: a look that is gone is dropped", sw[4] == "gone true 5", sw[4])
+check("sway: game wind direction 0 falls back to a default direction", sw[5] == "calm true true", sw[5])
+check("sway: no wind readable, nothing touched", sw[6] == "nowind 0", sw[6])
+check("sway: anchor rotation is host yaw then tilt", sw[7] == "compose 0.50 90.00 0.00" or sw[7] == "compose 0.50 90.00 -0.00", sw[7])
+print("  info: sway reach at 6 m", sw[8], "| pure Lua per tree update (us):", sw[9])
+
+cf = L.eval(r"""function(dir)
+    local C = require("horticulture_config")
+    local f = io.open(dir .. "\\..\\config.txt", "w") f:write("quiet = true\n") f:close()
+    local s = C.Load(dir)
+    local f2 = io.open(dir .. "\\..\\config.txt", "w") f2:write("sway = false\nsway_degrees = 0.6\n") f2:close()
+    local s2 = C.Load(dir)
+    os.remove(dir .. "\\..\\config.txt")
+    return string.format("%s %s %s %s %s %s", tostring(s.sway), tostring(s.sway_degrees), tostring(s.quiet), tostring(s.debug), tostring(s2.sway), tostring(s2.sway_degrees))
+end""")(os.path.join(TMP, "Scripts"))
+check("config: sway on by default (also for an old config.txt without it), 0.35 deg; sway = false turns it off",
+      cf == "true 0.35 true false false 0.6", cf)
+
+# Discovery reveals wait for the game's level-up banner ----------------------
+os.remove(save) if os.path.exists(save) else None
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+L.execute(r"""
+clock = 0
+os.clock = function() return clock end
+bannerOn = false
+local banner = { IsValid = function() return true end, IsInViewport = function() return true end,
+    IsVisible = function() return bannerOn end, GetRenderOpacity = function() return 1 end }
+FindAllOf = function(c) if c == "WBP_LevelUpNotification_C" then return { banner } end end
+levelUp = false
+ESL.AddXp = function(_, n, label) xp[#xp + 1] = label .. "=" .. n if levelUp then return n, 5, 6 end return n, 5, 5 end
+function step(sec) clock = clock + sec tick() end
+""")
+g = L.globals()
+potato = g.plot("FPD_Potato", 1, 50)
+ash = g.tree("Ash", True, 300, "sapling")
+g.nearby = L.table_from([potato, ash])
+g.aimed = potato
+g.press("G")
+g.step(10)
+g.aimed = ash
+g.press("G")
+g.step(10)
+g.take("cards")
+g.levelUp = True
+g.S.Dawn("test")
+g.step(0.5)
+c = g.take("cards")
+check("reveal hold: the ordinary dawn card shows at once", "GRAFT TOOK|" in c and "DISCOVERED" not in c, c)
+g.step(2)
+c = g.take("cards")
+check("reveal hold: discovery waits for the banner to appear after a level-up", "DISCOVERED" not in c, c)
+g.bannerOn = True
+for _ in range(10):
+    g.step(1)
+c = g.take("cards")
+check("reveal hold: discovery waits while the level-up banner is on screen", "DISCOVERED" not in c, c)
+g.bannerOn = False
+g.step(0.5)
+check("reveal hold: a moment's grace after the banner goes", "DISCOVERED" not in g.take("cards"))
+g.step(1)
+c = g.take("cards")
+check("reveal hold: then the discovery shows", "DISCOVERY CATALOGUE|TUBERWOOD ASH DISCOVERED|" in c, c)
+g.step(10)
+c = g.take("cards")
+check("reveal hold: the lore card follows the reveal", "FROM THE DISCOVERY CATALOGUE|Tuberwood Ash|" in c, c)
+g.bannerOn = True
+g.levelUp = False
+L.execute('S.Dawn("test")')
+for _ in range(30):
+    g.step(1)
+check("reveal hold: never held longer than 25 s (a banner that never goes)", True)
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):

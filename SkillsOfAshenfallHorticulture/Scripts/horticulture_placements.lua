@@ -21,6 +21,47 @@ Placements.MAX_VERSION = 50
 -- Groups dropped first when a shape has more pieces than the cap.
 Placements.THIN_FIRST = { "ground_fruit", "canopy_stem" }
 
+-- Groups never placed, whatever the data says: fruit lying under a tree
+-- looks like a pickup the player cannot pick up.
+Placements.SKIP_GROUPS = { "ground", "fallen" }
+
+-- Fruit (the game's item meshes, or a "fruit" group) is never drawn above
+-- this scale: anything larger reads as giant next to the real crop.
+Placements.FRUIT_MAX = 1.1
+-- Per mesh: SM_Wheat_01 is a whole 1.4 m wheat plant, so a natural sheaf is
+-- about half scale.
+Placements.FRUIT_MAX_MESH = { SM_Wheat_ = 0.6 }
+
+function Placements.FruitMax(mesh)
+    for part, max in pairs(Placements.FRUIT_MAX_MESH) do
+        if type(mesh) == "string" and mesh:find(part, 1, true) then return max end
+    end
+    return Placements.FRUIT_MAX
+end
+
+function Placements.Skipped(group)
+    local g = type(group) == "string" and group:lower() or ""
+    for _, word in ipairs(Placements.SKIP_GROUPS) do
+        if g:find(word, 1, true) then return true end
+    end
+    return false
+end
+
+function Placements.IsFruit(group, mesh)
+    return (type(group) == "string" and group:lower():find("fruit", 1, true) ~= nil)
+        or (type(mesh) == "string" and mesh:find("/Art/Item/", 1, true) ~= nil)
+end
+
+-- Scales x, y, z down together so the largest is at most the mesh's
+-- FruitMax. Never scales up.
+function Placements.ClampFruit(x, y, z, mesh)
+    local max = Placements.FruitMax(mesh)
+    local m = math.max(x, y, z)
+    if m <= max then return x, y, z end
+    local k = max / m
+    return x * k, y * k, z * k
+end
+
 -- Groups recoloured with a Looks tint name, per hybrid. Empty: the tint
 -- parameters had no visible effect on the willow canopy in game.
 Placements.GROUP_TINT = {}
@@ -85,7 +126,7 @@ function Placements.Pieces(shape, opts)
     opts = opts or {}
     local list = {}
     for _, a in ipairs(shape.attachments or {}) do
-        if opts.havePak or not a.requires_pak then list[#list + 1] = a end
+        if (opts.havePak or not a.requires_pak) and not Placements.Skipped(a.group) then list[#list + 1] = a end
     end
     local cap = opts.cap
     if cap and #list > cap then
@@ -104,10 +145,12 @@ function Placements.Pieces(shape, opts)
     local out = {}
     for _, a in ipairs(list) do
         local l, r, s = a.location or {}, a.rotation or {}, a.scale or {}
+        local sx, sy, sz = s[1] or 1, s[2] or s[1] or 1, s[3] or s[1] or 1
+        if Placements.IsFruit(a.group, a.mesh) then sx, sy, sz = Placements.ClampFruit(sx, sy, sz, a.mesh) end
         out[#out + 1] = {
             path = asset(a.mesh), x = l[1] or 0, y = l[2] or 0, z = l[3] or 0,
             pitch = r[1] or 0, yaw = r[2] or 0, roll = r[3] or 0,
-            scale = s[1] or 1, scaleY = s[2] or s[1] or 1, scaleZ = s[3] or s[1] or 1,
+            scale = sx, scaleY = sy, scaleZ = sz,
             group = a.group, overrides = a.material_overrides,
         }
     end

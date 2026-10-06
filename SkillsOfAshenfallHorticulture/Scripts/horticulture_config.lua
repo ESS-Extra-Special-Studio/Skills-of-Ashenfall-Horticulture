@@ -19,6 +19,12 @@ local FIELDS = {
       help = "Percent chance that a cabbage grafted onto a cabbage, once it takes, becomes something else entirely. 0 turns it off." },
     { key = "quiet", default = "false", kind = "bool",
       help = "true hides Horticulture's own cards (cuttings, grafts, Discovery Catalogue entries, the reminder after reading the book). XP and level-up notifications still show." },
+    { key = "sway", default = "true", kind = "bool",
+      help = "true lets the fruit on hybrid trees sway with the wind, like the leaves. false keeps it still (a little less work each frame)." },
+    { key = "sway_degrees", default = "0.35", kind = "number", min = 0, max = 3,
+      help = "How far hybrid trees' fruit leans in the game's normal wind, in degrees about the trunk base. 0 keeps it still." },
+    { key = "name_tag", default = "true", kind = "bool",
+      help = "true shows a hybrid's name (Tuberwood Ash) in a small tag above the game's prompt when you look at it, and the Brassica Primelet's name when you face it." },
     { key = "debug", default = "false", kind = "bool",
       help = "true writes extra detail to UE4SS.log, such as each XP payment and crop name lookup." },
 }
@@ -66,8 +72,9 @@ function Config.Load(dir, log)
         local v = raw[field.key]
         local value = nil
         if field.kind == "bool" then
-            if v == "true" or v == "1" or v == "yes" then value = true
-            elseif v == nil or v == "" or v == "false" or v == "0" or v == "no" then value = false end
+            if v == nil or v == "" then value = field.default == "true"
+            elseif v == "true" or v == "1" or v == "yes" then value = true
+            elseif v == "false" or v == "0" or v == "no" then value = false end
         elseif field.kind == "key" then
             local name = (v and v ~= "") and v:upper() or field.default
             if Key and Key[name] ~= nil then value = name end

@@ -111,7 +111,20 @@ local function canopy(size)
     return h * 0.62, h * 0.82, math.max(size.radius * 0.55, 60)
 end
 
+local layout
+Looks.FRUIT = { cabbage = true, cabbage2 = true, cabbage3 = true, potato = true, wheat = true, onion = true }
+
+-- Fruit pieces never above Placements.FRUIT_MAX (giant fruit reads wrong).
 function Looks.Layout(hybridId, scion, hostKind, size)
+    local out, hostScale = layout(hybridId, scion, hostKind, size)
+    local P = require("horticulture_placements")
+    for _, p in ipairs(out) do
+        if Looks.FRUIT[p.mesh] then p.scale = math.min(p.scale, P.FruitMax(Looks.MESH[p.mesh])) end
+    end
+    return out, hostScale
+end
+
+layout = function(hybridId, scion, hostKind, size)
     local out = {}
     local small = hostKind == "sapling" or hostKind == "plot"
     local s = small and math.max(size.height / 600, 0.25) or 1
@@ -476,7 +489,58 @@ local function unscale(saved)
     end
 end
 
+-- Wind sway (horticulture_sway): instanced looks tilt their anchor, which
+-- sits at the host mesh's pivot, so the whole look bends about the trunk.
+local swayer = nil
+local swayCost = { ticks = 0, seconds = 0, since = nil, reported = false }
+
+local function sway_apply(b, pitch, roll)
+    local a = b.actors[b.anchor or 1]
+    if not U.valid(a) then return false end
+    local r = b.t.rot
+    local rot = Placements.Rotator(Placements.QuatMul(Placements.Quat(r.Pitch, r.Yaw, r.Roll), Placements.Quat(pitch, 0, roll)))
+    pcall(function() a:K2_SetActorRotation(rot, false) end)
+    return true
+end
+
+-- opts: { enabled, deg, debug }. Off: nothing ticks and looks stay still.
+function Looks.StartSway(opts)
+    opts = opts or {}
+    U = U or require("horticulture_util")
+    if opts.enabled == false then U.log("Wind sway is off (sway = false)") return end
+    local Sway = require("horticulture_sway")
+    local cfg = { base_deg = opts.deg or Sway.defaults.base_deg }
+    swayer = Sway.new(cfg, {
+        clock = os.clock,
+        wind = function() return Sway.GameWind(swayer.cfg, UEHelpers.GetWorld()) end,
+        player = function() local p = U.location(U.pawn()) return p and { X = p.X, Y = p.Y } or nil end,
+        apply = sway_apply,
+    })
+    U.every(math.floor(1000 / cfg.rate_hz + 0.5), "Hybrid sway", function()
+        if swayer:count() == 0 then return end
+        local t0 = os.clock()
+        local n = swayer:tick()
+        local c = swayCost
+        c.ticks, c.seconds = c.ticks + 1, c.seconds + (os.clock() - t0)
+        c.since = c.since or t0
+        if os.clock() - c.since >= 30 then
+            if not c.reported or opts.debug then
+                U.log(string.format("Wind sway: %d tree(s) tilted, %.3f ms per update, %.2f ms per second%s",
+                    n, c.seconds / c.ticks * 1000, c.seconds / (os.clock() - c.since) * 1000,
+                    swayer.calm and " (game wind direction is 0; default direction used)" or ""))
+                c.reported = true
+            end
+            c.ticks, c.seconds, c.since = 0, 0, nil
+        end
+    end)
+    U.log(string.format("Wind sway on: %.2f deg at the game's default wind, nearest %d within %d m at %d Hz",
+        cfg.base_deg, swayer.cfg.max_trees, swayer.cfg.radius_cm / 100, swayer.cfg.rate_hz))
+end
+
+function Looks.SwayCount() return swayer and swayer:count() or 0 end
+
 function Looks.Clear(graftId)
+    if swayer then swayer:remove(graftId) end
     local b = built[graftId]
     if not b then return end
     for _, a in ipairs(b.actors) do
@@ -591,6 +655,7 @@ local function build_ism(world, b, t, pieces, tints, cull)
     local anchor = spawn(world, nil, t.loc, t.rot, t.scl)
     if not anchor then return 0 end
     b.actors[#b.actors + 1] = anchor
+    b.anchor = #b.actors
     local cls = load("/Script/Engine.InstancedStaticMeshComponent")
     if not cls then return 0 end
     local byKey, order = {}, {}
@@ -728,6 +793,9 @@ function Looks.Apply(g, h, mode, hybridId)
     local packaged = mode == "hybrid" and Looks.Packaged(hybridId) or nil
     if mode == "hybrid" and not packaged and apply_placement(world, b, h, hybridId) then
         b.count = math.max(#b.actors, b.instances or 0)
+        if swayer and b.instances and b.t and b.anchor and h.kind ~= "plot" then
+            swayer:add(g.id, b, { X = b.t.loc.X, Y = b.t.loc.Y, Yaw = b.t.rot.Yaw })
+        end
         return b.count
     end
     local attached = mode == "hybrid" and not packaged and Looks.Attachments(hybridId) or nil

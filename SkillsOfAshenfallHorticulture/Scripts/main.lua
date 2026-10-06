@@ -108,6 +108,9 @@ local config = {
     debug = Settings.debug,
     actionKey = Settings.action_key,
     primeletChance = Settings.primelet_chance,
+    sway = Settings.sway and Settings.sway_degrees > 0,
+    swayDegrees = Settings.sway_degrees,
+    nameTag = Settings.name_tag,
 }
 
 Book.Start(config)
@@ -141,20 +144,46 @@ local function in_world()
     return U.pc() ~= nil and ESL.Character() ~= nil
 end
 
+local function status_lines()
+    local prime = Splicing.PrimeletLine()
+    return Splicing.SatchelLine() .. (prime ~= "" and ("  |  " .. prime) or "") .. "  |  " .. Splicing.CatalogueLine()
+        .. "  |  " .. Training.CatalogueLine()
+end
+
+local statusOpen = false
 local function toggle_status()
     if not in_world() then log("Load into a world first") return end
     if not ESL.IsUnlocked(SKILL) then
         ESL.Gate(SKILL, { notify = true, title = "Horticulture", skill = SKILL })
         return
     end
-    ESL.ToggleStatus(SKILL, function()
-        local prime = Splicing.PrimeletLine()
-        return Splicing.SatchelLine() .. (prime ~= "" and ("  |  " .. prime) or "") .. "  |  " .. Splicing.CatalogueLine()
-            .. "  |  " .. Training.CatalogueLine()
-    end)
+    statusOpen = not statusOpen
+    ESL.ToggleStatus(SKILL, status_lines)
 end
 
 RegisterKeyBindAsync(Key[STATUS_KEY], {}, toggle_status)
+
+-- ESL redraws the status panel only when XP is paid, so while it is open it
+-- is redrawn here whenever the satchel, catalogue or Primelet change. ESL's
+-- card module lives in this mod's Lua state; without its refresh, the panel
+-- is closed and reopened in the same frame.
+local statusShown = nil
+U.every(1000, "Status refresh", function()
+    if not statusOpen then statusShown = nil return end
+    if not in_world() then statusOpen, statusShown = false, nil return end
+    local ok, text = pcall(status_lines)
+    if not ok or text == statusShown then return end
+    local first = statusShown == nil
+    statusShown = text
+    if first then return end
+    local Card, Store = package.loaded["card"], package.loaded["store"]
+    if Card and Card.RefreshStatus and Store and Store.Get then
+        pcall(Card.RefreshStatus, Store.Get(SKILL))
+    else
+        ESL.ToggleStatus(SKILL, status_lines)
+        ESL.ToggleStatus(SKILL, status_lines)
+    end
+end)
 
 -- Optional companion: the Action Wheel (hold Z) shows the same actions.
 local okWheel, onWheel = pcall(function() return require("horticulture_wheel").Start(Splicing, dir, toggle_status) end)

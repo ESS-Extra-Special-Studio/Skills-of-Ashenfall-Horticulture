@@ -18,6 +18,7 @@ local Core = require("horticulture_splice_core")
 local World = require("horticulture_world")
 local Looks = require("horticulture_looks")
 local Primelet = require("horticulture_primelet")
+local Tag = require("horticulture_nametag")
 
 local Splicing = {}
 
@@ -87,14 +88,56 @@ end
 
 -- Cards -------------------------------------------------------------------
 
-local function card(kicker, title, detail, seconds)
+-- reveal: a discovery card, held while the game's level-up banner is (or is
+-- about to be) on screen, so the two never cover each other.
+local function card(kicker, title, detail, seconds, reveal)
     if cfg.quiet then return end
-    cards[#cards + 1] = { kicker, title, detail or "", seconds or 4 }
+    cards[#cards + 1] = { kicker, title, detail or "", seconds or 4, reveal == true }
+end
+
+-- The host shows the banner a moment after the XP that levelled up.
+local BANNER_LEAD = 6
+local BANNER_GRACE = 1.0
+local MAX_HOLD = 25
+local revealHoldUntil = 0
+local heldSince, blockedAt = nil, nil
+
+local function note_level(old, new)
+    if old and new and new > old then revealHoldUntil = math.max(revealHoldUntil, now() + BANNER_LEAD) end
+end
+
+function Splicing.BannerShowing()
+    local list = FindAllOf and FindAllOf("WBP_LevelUpNotification_C") or nil
+    for _, w in ipairs(list or {}) do
+        local shown = false
+        pcall(function()
+            shown = w:IsValid() and w:IsInViewport() and w:IsVisible() and w:GetRenderOpacity() > 0.05
+        end)
+        if shown then return true end
+    end
+    return false
+end
+
+local function reveal_blocked(t)
+    if t < revealHoldUntil then return true end
+    local ok, shown = pcall(Splicing.BannerShowing)
+    return ok and shown
 end
 
 local function pump_cards()
     if #cards == 0 or now() < nextCardAt then return end
-    local c = table.remove(cards, 1)
+    local c = cards[1]
+    if c[5] then
+        local t = now()
+        heldSince = heldSince or t
+        if t - heldSince < MAX_HOLD then
+            if reveal_blocked(t) then blockedAt = t return end
+            if blockedAt and t - blockedAt < BANNER_GRACE then return end
+        end
+        if blockedAt then U.log(string.format("Reveal held %.1f s for the level-up banner", t - heldSince)) end
+        heldSince, blockedAt = nil, nil
+    end
+    table.remove(cards, 1)
     cfg.ESL.ShowCard(cfg.SKILL, c[1], c[2], c[3], c[4])
     nextCardAt = now() + math.max(CARD_GAP, c[4] + 0.5)
 end
@@ -107,7 +150,10 @@ end
 
 local function xp(amount, label)
     local ESL = cfg.ESL
-    local gain = ESL.AddXp and ESL.AddXp(cfg.SKILL, amount, label) or ESL.Award(cfg.SKILL, "splice:" .. label .. ":" .. os.time() .. ":" .. math.random(1e6), amount, label)
+    local gain, old, new
+    if ESL.AddXp then gain, old, new = ESL.AddXp(cfg.SKILL, amount, label)
+    else gain, old, new = ESL.Award(cfg.SKILL, "splice:" .. label .. ":" .. os.time() .. ":" .. math.random(1e6), amount, label) end
+    note_level(old, new)
     if cfg.dev or cfg.debug then U.log("XP " .. label .. " +" .. tostring(gain)) end
     return gain
 end
@@ -160,16 +206,17 @@ local function discover(g)
     local f = Rules.Flagship(g.scion, g.host)
     local name = Rules.HybridName(g.scion, g.host)
     local amount = f and Rules.XP.flagship or Rules.XP.discovery
-    local gain = cfg.ESL.Award(cfg.SKILL, "hybrid:" .. id, amount, name .. " discovered")
+    local gain, old, new = cfg.ESL.Award(cfg.SKILL, "hybrid:" .. id, amount, name .. " discovered")
     if not gain then return false end
+    note_level(old, new)
     if f then
         local n = flagship_count()
         card("DISCOVERY CATALOGUE", string.upper(name) .. " DISCOVERED",
-            string.format("%s %d of %d flagship hybrids.", f.detail, n, Rules.FLAGSHIP_TOTAL), 7)
-        card("FROM THE DISCOVERY CATALOGUE", name, f.lore, 7)
+            string.format("%s %d of %d flagship hybrids.", f.detail, n, Rules.FLAGSHIP_TOTAL), 9, true)
+        card("FROM THE DISCOVERY CATALOGUE", name, f.lore, 9, true)
     else
         card("HYBRID RECORDED", name,
-            string.format("%s onto %s. Gives %s.", Rules.Name(g.scion), Rules.Name(g.host):lower(), Rules.Name(g.scion):lower()), 5)
+            string.format("%s onto %s. Gives %s.", Rules.Name(g.scion), Rules.Name(g.host):lower(), Rules.Name(g.scion):lower()), 6, true)
     end
     U.log("Discovered " .. name .. " (+" .. tostring(gain) .. " XP)")
     return true
@@ -332,14 +379,15 @@ local function primelet_born(o)
     xp(Rules.XP.takes, "Graft took")
     local R = Primelet.REVEAL
     local howto = R.howto:gsub("%f[%w]G%f[%W]", cfg.actionKey)
-    card(R.kicker, R.title, R.detail, 9)
-    local gain = cfg.ESL.Award(cfg.SKILL, "hybrid:" .. Rules.PRIMELET.id, Rules.XP.primelet, Rules.PRIMELET.name .. " discovered")
+    local gain, old, new = cfg.ESL.Award(cfg.SKILL, "hybrid:" .. Rules.PRIMELET.id, Rules.XP.primelet, Rules.PRIMELET.name .. " discovered")
+    note_level(old, new)
+    card(R.kicker, R.title, R.detail, 9, true)
     if gain then
-        card("DISCOVERY CATALOGUE", "SECRET ENTRY: " .. string.upper(Rules.PRIMELET.name), R.catalogue, 7)
-        card(Rules.PRIMELET.name, "The Observances", R.lore, 10)
-        card("KEEPING A PRIMELET", Rules.PRIMELET.name, howto, 9)
+        card("DISCOVERY CATALOGUE", "SECRET ENTRY: " .. string.upper(Rules.PRIMELET.name), R.catalogue, 9, true)
+        card(Rules.PRIMELET.name, "The Observances", R.lore, 10, true)
+        card("KEEPING A PRIMELET", Rules.PRIMELET.name, howto, 9, true)
     else
-        card(Rules.PRIMELET.name, "Another one", "The cabbages are, it seems, talking. " .. howto, 9)
+        card(Rules.PRIMELET.name, "Another one", "The cabbages are, it seems, talking. " .. howto, 9, true)
     end
     vfx_at({ X = p.x, Y = p.y, Z = (p.z or 0) + 40 })
     U.log(string.format("Brassica Primelet %s from graft %s at %.0f, %.0f (world %s)", p.id, g.id, p.x, p.y, tostring(p.world)))
@@ -530,11 +578,34 @@ local function set_down(entry)
     U.log(string.format("Primelet %s set down at %.0f, %.0f, %.0f (world %s)", p.id, x, y, z, tostring(p.world)))
 end
 
--- The game's interact key: tends a Primelet the player faces, unless the
--- game's own prompt is on something else.
+-- E on a hybrid tree picks from it. A standing tree has no interaction of
+-- its own (chopping is a swing), so this takes nothing from the game; with
+-- the prompt on anything else, E is left alone.
+local interactRefusedAt = -math.huge
+local function interact_pick()
+    local me = U.location(U.pawn())
+    if not me then return false end
+    local c = World.PromptHost(me)
+    if not c and not World.PromptTarget() then c = World.Aimed() end
+    if not (c and c.kind == "tree") then return false end
+    local g = Core.GraftOn(st, as_point(c))
+    if not (g and g.state == "hybrid" and g.kind ~= "plot") then return false end
+    local ok, why = Core.CanPick(st, g)
+    if ok then
+        pick(g)
+    elseif now() - interactRefusedAt > 8 then
+        interactRefusedAt = now()
+        refuse("NOTHING TO PICK", why)
+    end
+    return true
+end
+
+-- The game's interact key: picks from a hybrid tree, or tends a Primelet the
+-- player faces, unless the game's own prompt is on something else.
 function Splicing.Interact()
     if not (U.pc() and cfg.ESL.Character() and cfg.ESL.IsUnlocked(cfg.SKILL)) then return end
     if not ensure_state() then return end
+    if interact_pick() then return end
     local p = near_primelet()
     if not p or World.PromptTarget() then return end
     tend(p)
@@ -793,13 +864,39 @@ function Splicing.Dump()
     U.log("[splice] " .. Splicing.CatalogueLine())
 end
 
+-- The name for the tag above the game's prompt: a hybrid's own name while
+-- the prompt is on its tree or shoot ("Ash Tree" is all the game knows), or
+-- the Primelet's when the player faces it and the game shows no prompt.
+function Splicing.TagText()
+    if not (st and cfg.ESL.Character()) then return nil end
+    local me = U.location(U.pawn())
+    if not me then return nil end
+    local host = World.PromptHost(me)
+    if host then
+        if host.kind == "stump" then return nil end
+        local g = Core.GraftOn(st, as_point(host))
+        if not (g and g.state == "hybrid") then return nil end
+        return g.plants and #g.plants > 2 and Rules.PlantsName(g.plants) or Rules.HybridName(g.scion, g.host)
+    end
+    if World.PromptTarget() then return nil end
+    local p = near_primelet()
+    return p and Primelet.Name(p) or nil
+end
+
+local function update_tag()
+    local ok, text = pcall(Splicing.TagText)
+    Tag.Show(ok and text or nil)
+end
+
 function Splicing.Start(config)
     cfg = config
     Looks.Init(U, cfg.dir)
+    Looks.StartSway({ enabled = cfg.sway ~= false, deg = cfg.swayDegrees, debug = cfg.debug })
     math.randomseed(os.time())
     U.every(2000, "Splicing clock", function() U.game(watch_clock) end)
     U.every(2000, "Hybrid looks", function() U.game(refresh_looks) U.game(refresh_primelets) end)
     U.every(500, "Splicing cards", pump_cards)
+    if cfg.nameTag ~= false then U.every(200, "Hybrid name tag", function() U.game(update_tag) end) end
     local key = Key[cfg.actionKey]
     RegisterKeyBindAsync(key, {}, function() U.game(Splicing.Action) end)
     RegisterKeyBindAsync(key, { ModifierKey.ALT }, function() U.game(Splicing.TakeCutting) end)
