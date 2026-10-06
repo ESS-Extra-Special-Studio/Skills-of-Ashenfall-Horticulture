@@ -548,6 +548,60 @@ function World.Give(path, count)
     return false
 end
 
+-- Drops count of an item as world pickups around loc, launched up and out
+-- like the game's own drops, through
+-- ItemHelperLibrary:SpawnAndLaunchItem_Sync(WorldContext, ItemSpawnParameters)
+-- with the runtime world item Blueprint. Only the host spawns them; the
+-- game replicates world items. True when every pickup spawned.
+local ITEM_LIB = "/Script/Dominion.Default__ItemHelperLibrary"
+local WORLD_ITEM = "/Game/Gameplay/WorldItems/BP_RuntimeSpawnedWorldItem.BP_RuntimeSpawnedWorldItem"
+local DROP_PIECES = 6
+local DROP_SPREAD = 120
+local worldItemClass = nil
+
+local function world_item_class()
+    if U.valid(worldItemClass) then return worldItemClass end
+    local cls = StaticFindObject(WORLD_ITEM .. "_C")
+    if not U.valid(cls) and LoadAsset then
+        pcall(LoadAsset, WORLD_ITEM)
+        cls = StaticFindObject(WORLD_ITEM .. "_C")
+    end
+    worldItemClass = U.valid(cls) and cls or nil
+    return worldItemClass
+end
+
+function World.Drop(path, count, loc)
+    if not (loc and count and count > 0) or not World.IsServer() then return false end
+    local data, cls, lib = load_item(path), world_item_class(), StaticFindObject(ITEM_LIB)
+    if not (data and cls and U.valid(lib)) then
+        U.log_once("nodrop" .. path, "Cannot drop " .. path .. " as pickups; it goes to the inventory")
+        return false
+    end
+    local pieces, dropped = math.min(count, DROP_PIECES), 0
+    for i = 1, pieces do
+        local n = math.floor(count / pieces) + (i <= count % pieces and 1 or 0)
+        local at = { X = loc.X + (math.random() * 2 - 1) * DROP_SPREAD, Y = loc.Y + (math.random() * 2 - 1) * DROP_SPREAD, Z = loc.Z }
+        local out = {}
+        local ok, item = pcall(function()
+            return lib:SpawnAndLaunchItem_Sync(UEHelpers.GetWorld(), {
+                ItemClass = cls, bCreateItem = true, bMagnetize = false, SpawnedItemData = data, Count = n,
+                Transform = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 }, Translation = at, Scale3D = { X = 1, Y = 1, Z = 1 } },
+                LaunchDirection = { X = 0, Y = 0, Z = 1 }, LaunchSpeed = 350, LaunchAngleVariance = 45, bSkipFloorSafetyCheck = false,
+            }, out)
+        end)
+        if not (ok and U.valid(item)) then
+            local why = tostring(item)
+            pcall(function() why = out.OutFailureReason:ToString() end)
+            U.log_once("drop" .. path, "Could not drop " .. path .. ": " .. why)
+            if dropped == 0 then return false end
+            World.Give(path, count - dropped)
+            return true
+        end
+        dropped = dropped + n
+    end
+    return true
+end
+
 -- A crop's vanilla BaseYield and HarvestXpFactor, read from its loaded
 -- FarmPlantDataAsset ({ yield, factor }); nil fields fall back to Rules.
 local cropValues = {}

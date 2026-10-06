@@ -385,6 +385,133 @@ local function tree_opts(g)
     return { farming = skills().Farming, live = live }
 end
 
+-- Felling -------------------------------------------------------------------
+-- Vanilla turns a felled tree into a stump and spawns a separate FelledTree
+-- actor that topples and then collapses its canopy into logs. A hybrid's
+-- look rides on that actor while it falls, and its produce drops where the
+-- canopy comes down.
+local FELL_MATCH = 800
+local FALL_TIMEOUT = 20
+local falling = {}
+
+local function canopy_location(actor)
+    local loc = nil
+    pcall(function()
+        local c = actor.Canopy
+        if U.valid(c) then
+            local l = c:K2_GetComponentLocation()
+            loc = { X = l.X, Y = l.Y, Z = l.Z }
+        end
+    end)
+    return loc or U.location(actor)
+end
+
+local function claimed(actor)
+    local name = U.full(actor)
+    for _, f in pairs(falling) do
+        if U.full(f.actor) == name then return true end
+    end
+    return false
+end
+
+-- The unclaimed FelledTree nearest the graft, or nil.
+local function felled_near(g)
+    local best, bestD = nil, FELL_MATCH
+    for _, a in ipairs(U.live_of("FelledTree")) do
+        local d = U.dist2d(U.location(a), { X = g.x or 0, Y = g.y or 0 })
+        if d < bestD and not claimed(a) then best, bestD = a, d end
+    end
+    return best
+end
+
+-- Drops the products as pickups at loc, or gives them when they cannot drop.
+local function drop_products(list, loc)
+    local parts, given = {}, false
+    for _, p in ipairs(list) do
+        if loc and World.Drop(p.item, p.count, loc) then
+            parts[#parts + 1] = p.count .. " " .. p.name:lower()
+        elseif World.Give(p.item, p.count) then
+            parts[#parts + 1] = p.count .. " " .. p.name:lower()
+            given = true
+        end
+    end
+    return parts, given
+end
+
+local function land(id, f, why)
+    falling[id] = nil
+    local parts, given = drop_products(f.products, f.loc)
+    Looks.Clear(id)
+    U.log(string.format("Felled hybrid %s came down (%s): %s", id, why, #parts > 0 and table.concat(parts, ", ") or "nothing to drop"))
+    if #parts > 0 then
+        card("FELLED", Rules.HybridName(f.g.scion, f.g.host),
+            (given and "It gave " or "It dropped ") .. table.concat(parts, ", ") .. " as it came down.")
+    end
+end
+
+local function collapse_state(actor)
+    local s = nil
+    pcall(function() s = actor.CollapseState end)
+    return tonumber(s) or 0
+end
+
+local function watch_falling()
+    for id, f in pairs(falling) do
+        if not U.valid(f.actor) then
+            land(id, f, "felled tree gone")
+        else
+            f.loc = canopy_location(f.actor) or f.loc
+            if collapse_state(f.actor) ~= 0 then
+                land(id, f, "canopy collapsed")
+            elseif now() - f.at > FALL_TIMEOUT then
+                land(id, f, "timed out")
+            elseif Looks.KeepFelledTint(id) and not f.retinted then
+                f.retinted = true
+                U.log("Felled hybrid " .. id .. ": canopy materials changed while falling; tint applied again")
+            end
+        end
+    end
+end
+
+-- Ends graft g, felled from host c; actor is the FelledTree it became,
+-- nil when none was found (the produce then drops at the stump).
+local function fell(g, actor, c)
+    if c and cfg.promptNames ~= false then Names.Restore(U, c.actor) end
+    local products = Core.Felled(st, g, tree_opts(g))
+    plotStage[g.id] = nil
+    save()
+    U.log("Graft " .. g.id .. " ended: felled")
+    if not U.valid(actor) then
+        local base = c and c.loc or { X = g.x or 0, Y = g.y or 0, Z = (U.location(U.pawn()) or { Z = 0 }).Z }
+        land(g.id, { g = g, products = products, loc = { X = base.X, Y = base.Y, Z = base.Z + 300 } }, "no felled tree found")
+        return
+    end
+    local carried = Looks.CarryToFelled(g.id, actor)
+    falling[g.id] = { actor = actor, g = g, products = products, at = now(), loc = canopy_location(actor) }
+    U.log(string.format("Felled hybrid %s: look %s %s, %d product(s) wait for the canopy", g.id,
+        carried and "carried onto" or "not carried onto", U.full(actor), #products))
+end
+
+-- A FelledTree just spawned: when it came from a hybrid's tree (that tree
+-- is now a stump) the hybrid falls with it.
+local function felled_spawned(actor, tries)
+    if not (U.valid(actor) and ensure_state()) or claimed(actor) then return end
+    local at = U.location(actor)
+    if not at then return end
+    for _, g in ipairs(st.grafts) do
+        if g.kind ~= "plot" and U.dist2d(at, { X = g.x or 0, Y = g.y or 0 }) < FELL_MATCH then
+            local c = host_of(g, World.Nearby(at, FELL_MATCH * 2))
+            if c and c.kind == "stump" then
+                fell(g, actor, c)
+                return
+            elseif (tries or 0) < 5 and ExecuteWithDelay then
+                ExecuteWithDelay(200, function() U.game(function() felled_spawned(actor, (tries or 0) + 1) end) end)
+                return
+            end
+        end
+    end
+end
+
 local function refresh_looks()
     if not ensure_state() or #st.grafts == 0 then return end
     local me = U.location(U.pawn())
@@ -397,14 +524,7 @@ local function refresh_looks()
         if not c then
             Looks.Clear(g.id)
         elseif c.kind == "stump" then
-            if cfg.promptNames ~= false then Names.Restore(U, c.actor) end
-            local products = Core.Felled(st, g, tree_opts(g))
-            end_graft(g, "felled")
-            if #products > 0 then
-                local parts = give_products(products)
-                card("FELLED", Rules.HybridName(g.scion, g.host),
-                    #parts > 0 and ("It gave " .. table.concat(parts, ", ") .. " as it fell.") or "")
-            end
+            fell(g, felled_near(g), c)
         else
             if g.kind == "plot" then watch_plot(g, c) end
             if Core.GraftOn(st, as_point(c)) == g then
@@ -1167,6 +1287,14 @@ function Splicing.Start(config)
     })
     U.every(2000, "Splicing clock", function() U.game(watch_clock) end)
     U.every(2000, "Hybrid looks", function() U.game(refresh_looks) U.game(refresh_primelets) end)
+    U.every(250, "Felled hybrids", function() if next(falling) then U.game(watch_falling) end end)
+    if NotifyOnNewObject then
+        local ok, err = pcall(NotifyOnNewObject, "/Script/Dominion.FelledTree", function(actor)
+            local later = function() U.game(function() felled_spawned(actor) end) end
+            if ExecuteWithDelay then ExecuteWithDelay(200, later) else later() end
+        end)
+        if not ok then U.log("Felled tree watch unavailable: " .. tostring(err)) end
+    end
     U.every(500, "Splicing cards", pump_cards)
     U.every(math.floor(Chatter.PollSeconds() * 1000), "Primelet chatter",
         function() U.game(function() if st and cfg.ESL.Character() then Chatter.Poll() end end) end)

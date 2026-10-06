@@ -712,6 +712,67 @@ function Looks.Clear(graftId)
     built[graftId] = nil
 end
 
+-- Moves a graft's look onto the FelledTree its host became: the pieces ride
+-- on the falling canopy (KeepWorld, so they stay where they hang) and the
+-- mutation tint goes from the stump to the falling meshes. Looks.Clear ends
+-- it when the canopy collapses. True when anything was carried.
+function Looks.CarryToFelled(graftId, felled)
+    local b = built[graftId]
+    if not b or not U.valid(felled) then return false end
+    if swayer then swayer:remove(graftId) end
+    local target = nil
+    pcall(function() target = felled.Canopy end)
+    if not U.valid(target) then pcall(function() target = felled:K2_GetRootComponent() end) end
+    local n = 0
+    if U.valid(target) then
+        for _, a in ipairs(b.actors) do
+            if U.valid(a) and pcall(function() a:K2_AttachToComponent(target, FName("None"), 1, 1, 1, false) end) then
+                n = n + 1
+            end
+        end
+    end
+    untint(b.tinted)
+    b.tinted = nil
+    local slots = ""
+    if b.mutation and Looks.MUTATION then
+        -- FelledTree Blueprints hide their meshes from a component search.
+        local comps = {}
+        for _, field in ipairs({ "Canopy", "Trunk", "Log", "Mesh" }) do
+            local c = nil
+            pcall(function() c = felled[field] end)
+            if U.valid(c) then comps[#comps + 1] = c end
+        end
+        b.mutationHost = { actor = felled, kind = "tree", comps = comps }
+        b.tinted = mutate(b.mutationHost, b.mutation)
+        if #b.tinted == 0 then
+            local names = {}
+            for _, comp in ipairs(comps) do
+                local k = 0
+                pcall(function() k = comp:GetNumMaterials() end)
+                for i = 0, math.min(k, 8) - 1 do
+                    local m = nil
+                    pcall(function() m = comp:GetMaterial(i) end)
+                    names[#names + 1] = U.fname(comp) .. ":" .. tostring(material_path(m))
+                end
+            end
+            slots = " [" .. table.concat(names, ", ") .. "]"
+        end
+    end
+    U.log(string.format("Look %s carried onto %s: %d piece(s) attached to %s, %d slot(s) tinted%s", graftId, U.fname(felled),
+        n, U.fname(target), b.tinted and #b.tinted or 0, slots))
+    return n > 0 or (b.tinted ~= nil and #b.tinted > 0)
+end
+
+-- Tints the carried look again when the game swapped the falling meshes'
+-- materials; true when it had to.
+function Looks.KeepFelledTint(graftId)
+    local b = built[graftId]
+    if not (b and b.mutationHost and b.mutation and Looks.MUTATION) or mutation_holds(b.tinted) then return false end
+    untint(b.tinted)
+    b.tinted = mutate(b.mutationHost, b.mutation)
+    return true
+end
+
 -- Dev: mutation tints off and on again, for before/after comparisons.
 function Looks.DevToggleMutation()
     Looks.MUTATION = not Looks.MUTATION
