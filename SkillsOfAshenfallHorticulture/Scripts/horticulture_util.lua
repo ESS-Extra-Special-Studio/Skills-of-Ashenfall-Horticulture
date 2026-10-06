@@ -88,8 +88,11 @@ local function build_mode_on(comp)
     pcall(function() flag = comp.bIsBuildMode end)
     pcall(function() mode = comp.CurrentBuildMode end)
     mode = tonumber(mode)
-    local on = flag == true or (flag == nil and mode ~= nil and mode ~= 0)
-    local seen = tostring(flag) .. "/" .. tostring(mode)
+    -- bIsBuildMode reads back as a TrivialObject in game, never a boolean;
+    -- CurrentBuildMode is 1 with the build menu open and 2 while placing.
+    if type(flag) ~= "boolean" then flag = nil end
+    local on = flag == true or (mode ~= nil and mode ~= 0)
+    local seen = tostring(on) .. "/" .. tostring(flag) .. "/" .. tostring(mode)
     if seen ~= building.said then
         building.said = seen
         U.log("Build mode " .. (on and "on" or "off") .. " (bIsBuildMode " .. tostring(flag)

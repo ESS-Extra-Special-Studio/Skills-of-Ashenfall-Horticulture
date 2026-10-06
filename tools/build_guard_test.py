@@ -106,5 +106,21 @@ g.build.CurrentBuildMode = 0
 g.tick(4.0)
 check("CurrentBuildMode back to 0, after grace: tasks run", g.take(), 1)
 
+g = runtime()
+g.pawn.BuildModeComponent = g.build
+g.build.bIsBuildMode = g.pawn
+g.build.CurrentBuildMode = 0
+g.tick()
+check("bIsBuildMode an object (as in game), CurrentBuildMode 0: tasks run", g.take(), 1)
+g.build.CurrentBuildMode = 1
+g.tick(); g.tick()
+check("bIsBuildMode an object, build menu open (CurrentBuildMode 1): tasks held", g.take(), 0)
+g.build.CurrentBuildMode = 2
+g.tick()
+check("bIsBuildMode an object, placing (CurrentBuildMode 2): tasks held", g.take(), 0)
+g.build.CurrentBuildMode = 0
+g.tick(4.0)
+check("bIsBuildMode an object, out of build mode after grace: tasks run", g.take(), 1)
+
 print("RESULT", "FAIL" if failures else "PASS")
 sys.exit(1 if failures else 0)
