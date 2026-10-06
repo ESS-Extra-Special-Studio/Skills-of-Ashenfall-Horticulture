@@ -127,6 +127,7 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `action_key` | `G` | The splicing key, by its UE4SS key name. Alt and Shift with it take a cutting and select the next one. |
 | `primelet_chance` | `1.5` | Percent of cabbage-on-cabbage grafts that become a Brassica Primelet once they take. `0` turns it off. |
 | `quiet` | `false` | `true` drops Horticulture's own cards (cuttings, grafts, the catalogue, the unlock reminder); XP and level-ups still show. |
+| `mutation_tint` | `true` | Each hybrid's leaves (or crop) take on their own mutated colour: Tuberwood Ash a deep blue-violet, Sheaf Ash harvest gold, and so on. Every other combination gets a colour of its own, and the same pair always looks the same. `false` keeps the host plant's natural colours. |
 | `name_tag` | `true` | Hybrid trees always name themselves in the game's own prompt ("Tuberwood Ash" instead of "Ash Tree"). This small tag above the prompt names the Brassica Primelet you face, and any hybrid the prompt cannot name. `false` turns the tag off. |
 | `primelet_chattiness` | `normal` | How often a Mini Brassica Prime speaks up on its own: `off`, `quiet`, `normal` or `chatty`. With `off` it only answers when you talk to it or tend it. |
 | `sway` | `true` | Fruit on hybrid trees sways with the game's wind, like the leaves (the nearest 12 within 30 m). `false` keeps it still. |

@@ -1582,6 +1582,103 @@ cfgt = L.eval(r"""function(tmp)
 end""")(TMP)
 check("config: primelet_chattiness reads off/quiet/normal/chatty, else normal", cfgt == "chatty normal normal", cfgt)
 
+# Mutation tints ------------------------------------------------------------
+mut = L.eval(r"""function(scripts, tmp)
+    local M = require("horticulture_mutation")
+    local Rules = require("horticulture_splice_rules")
+    local out = {}
+    local combos = dofile(scripts .. "\\placements\\hort_plant_generic_hybrids_1_25_combos_v003.lua").combos
+    local n, none, bad, unstable, used = 0, 0, 0, 0, {}
+    for _, e in ipairs(combos) do
+        local scion, host = e.key:match("^(.-)>(.+)$")
+        local id = Rules.HybridId(scion, host)
+        local t = M.For(id, Rules.ComboKey(scion, host))
+        n = n + 1
+        if not t then none = none + 1 else
+            used[t.name] = true
+            if math.abs(t.hue) > 1 or t.mult.R < 0.5 or t.mult.G < 0.5 or t.mult.B < 0.5
+                or t.mult.R > 1 or t.mult.G > 1 or t.mult.B > 1 then bad = bad + 1 end
+            if M.For(id, Rules.ComboKey(scion, host)) ~= t then unstable = unstable + 1 end
+        end
+    end
+    local nu = 0
+    for _ in pairs(used) do nu = nu + 1 end
+    out[#out + 1] = string.format("n %d none %d bad %d unstable %d names %d", n, none, bad, unstable, nu)
+    local names, dup = {}, 0
+    for id, f in pairs(M.FLAGSHIP) do
+        if names[f.name] then dup = dup + 1 end
+        names[f.name] = true
+        if math.abs(f.hue) > 1 or f.mult.R < 0.5 or f.mult.G < 0.5 or f.mult.B < 0.5 then dup = dup + 100 end
+    end
+    out[#out + 1] = "flagship dup " .. dup
+    local tub = M.For("TuberwoodAsh", "potato>ash")
+    out[#out + 1] = string.format("tub %s %.2f %s", tub.name, tub.hue, tostring(tub.mult.B > tub.mult.R and tub.mult.B > tub.mult.G))
+    out[#out + 1] = string.format("hash %d %d", M.Hash(""), M.Hash("a"))
+    out[#out + 1] = table.concat({ tostring(M.Takes("tree", "/Game/Env/MI_GF_AshTree_Leaves.MI_GF_AshTree_Leaves")),
+        tostring(M.Takes("tree", "/Game/Env/MI_GF_AshTree_Bark.MI_GF_AshTree_Bark")), tostring(M.Takes("sapling", "MI_Oak_Foliage")),
+        tostring(M.Takes("plot", "MI_Cabbage")) }, " ")
+    -- applying it: leaf slot gets a dynamic instance, bark is left; an
+    -- existing dynamic instance is changed in place and put back on untint
+    local Looks = require("horticulture_looks")
+    Looks.Init(require("horticulture_util"), scripts .. "\\placements")
+    local calls = {}
+    local function mat(name) return { IsValid = function() return true end, GetFullName = function() return name end } end
+    local function newMid(name)
+        local m = mat(name)
+        m.SetScalarParameterValue = function(_, p, x) calls[#calls + 1] = string.format("%s s %s %.2f", name, p, x) end
+        m.SetVectorParameterValue = function(_, p, c) calls[#calls + 1] = string.format("%s v %s %.2f", name, p, c.B) end
+        m.K2_GetScalarParameterValue = function() return 0.25 end
+        m.K2_GetVectorParameterValue = function() return { R = 1, G = 1, B = 0.5, A = 1 } end
+        return m
+    end
+    local slots = { mat("MaterialInstanceConstant /Game/MI_Ash_Bark"), mat("MaterialInstanceConstant /Game/MI_Ash_Leaves") }
+    local created = newMid("MaterialInstanceDynamic /Engine/Transient.MID_1")
+    local comp = { IsValid = function() return true end, GetNumMaterials = function() return #slots end,
+        GetMaterial = function(_, i) return slots[i + 1] end,
+        CreateDynamicMaterialInstance = function(_, i, src) calls[#calls + 1] = "create " .. i slots[i + 1] = created return created end,
+        SetMaterial = function(_, i, m) calls[#calls + 1] = "set " .. i .. " " .. m:GetFullName() slots[i + 1] = m end }
+    local saved = Looks.Mutate({ kind = "tree", comps = { comp } }, tub)
+    out[#out + 1] = #saved .. " | " .. table.concat(calls, ", ")
+    out[#out + 1] = "holds " .. tostring(Looks.MutationHolds(saved))
+    slots[2] = mat("MaterialInstanceConstant /Game/MI_Ash_Leaves")
+    out[#out + 1] = "swapped " .. tostring(Looks.MutationHolds(saved))
+    calls = {}
+    local existing = newMid("MaterialInstanceDynamic /Engine/Transient.MID_9")
+    existing.Parent = mat("MaterialInstanceConstant /Game/MI_Ash_Leaves")
+    slots[2] = existing
+    saved = Looks.Mutate({ kind = "tree", comps = { comp } }, tub)
+    Looks.Untint(saved)
+    out[#out + 1] = #saved .. " | " .. table.concat(calls, ", ")
+    calls = {}
+    slots[2] = mat("MaterialInstanceConstant /Game/MI_Ash_Leaves")
+    Looks.Untint(Looks.Mutate({ kind = "tree", comps = { comp } }, tub))
+    out[#out + 1] = table.concat(calls, ", ")
+    local C = require("horticulture_config")
+    local dir = tmp .. "\\cfgm" .. tostring(math.random(100000))
+    os.execute('mkdir "' .. dir .. '\\Scripts" 2>nul')
+    local f = io.open(dir .. "\\config.txt", "w") f:write("") f:close()
+    local d = C.Load(dir .. "\\Scripts", function() end).mutation_tint
+    f = io.open(dir .. "\\config.txt", "w") f:write("mutation_tint = false\n") f:close()
+    out[#out + 1] = "cfg " .. tostring(d) .. " " .. tostring(C.Load(dir .. "\\Scripts", function() end).mutation_tint)
+    return table.concat(out, "\n")
+end""")(SCRIPTS, TMP).split("\n")
+check("mutation: all 150 combos get a tint, within bounds, the same every time, from several palette colours",
+      mut[0].startswith("n 150 none 0 bad 0 unstable 0 ") and int(mut[0].split()[-1]) >= 6, mut[0])
+check("mutation: each flagship has its own tint", mut[1] == "flagship dup 0", mut[1])
+check("mutation: Tuberwood Ash stays deep blue-violet", mut[2].startswith("tub deep blue-violet ") and mut[2].endswith(" true"), mut[2])
+check("mutation: FNV-1a hash", mut[3] == "hash 2166136261 3826002220", mut[3])
+check("mutation: trees tint leaves, not bark; crops tint the whole plant", mut[4] == "true false true true", mut[4])
+check("mutation: a dynamic instance of the leaf slot only, hue then both colour multiplies",
+      mut[5] == "1 | create 1, MaterialInstanceDynamic /Engine/Transient.MID_1 s RandomColor_HueShift 0.42, "
+      "MaterialInstanceDynamic /Engine/Transient.MID_1 v Color_Mult_A 1.00, MaterialInstanceDynamic /Engine/Transient.MID_1 v Color_Mult_B 1.00", mut[5])
+check("mutation: noticed when the game swaps the material back", mut[6] == "holds true" and mut[7] == "swapped false", mut[6:8])
+check("mutation: an existing dynamic instance is tinted in place and its values put back",
+      mut[8].startswith("1 | ") and "create" not in mut[8] and mut[8].endswith("MID_9 s RandomColor_HueShift 0.25, "
+      "MaterialInstanceDynamic /Engine/Transient.MID_9 v Color_Mult_A 0.50, MaterialInstanceDynamic /Engine/Transient.MID_9 v Color_Mult_B 0.50")
+      or mut[8].endswith("MID_9 v Color_Mult_B 0.50, MaterialInstanceDynamic /Engine/Transient.MID_9 v Color_Mult_A 0.50"), mut[8])
+check("mutation: untint puts the original material back", mut[9].endswith("set 1 MaterialInstanceConstant /Game/MI_Ash_Leaves"), mut[9])
+check("config: mutation_tint defaults on and can be turned off", mut[10] == "cfg true false", mut[10])
+
 # Secrecy: nothing a player sees mentions what five Minis are for ----------
 import re  # noqa: E402
 SHIP = os.path.join(ROOT, "SkillsOfAshenfallHorticulture")

@@ -111,6 +111,7 @@ local config = {
     sway = Settings.sway and Settings.sway_degrees > 0,
     swayDegrees = Settings.sway_degrees,
     nameTag = Settings.name_tag,
+    mutationTint = Settings.mutation_tint,
     primeletChattiness = Settings.primelet_chattiness,
 }
 

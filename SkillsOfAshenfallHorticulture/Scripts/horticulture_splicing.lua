@@ -1046,6 +1046,7 @@ function Splicing.Start(config)
     cfg = config
     Looks.Init(U, cfg.dir)
     Looks.StartSway({ enabled = cfg.sway ~= false, deg = cfg.swayDegrees, debug = cfg.debug })
+    Looks.MUTATION = cfg.mutationTint ~= false
     math.randomseed(os.time())
     Chatter.Init(U, cfg, {
         state = function() return st end,

@@ -23,6 +23,8 @@ local FIELDS = {
       help = "true lets the fruit on hybrid trees sway with the wind, like the leaves. false keeps it still (a little less work each frame)." },
     { key = "sway_degrees", default = "0.35", kind = "number", min = 0, max = 3,
       help = "How far hybrid trees' fruit leans in the game's normal wind, in degrees about the trunk base. 0 keeps it still." },
+    { key = "mutation_tint", default = "true", kind = "bool",
+      help = "true gives each hybrid's leaves (or crop) its own mutated colour, such as Tuberwood Ash's deep blue-violet. false keeps the host plant's natural colours." },
     { key = "name_tag", default = "true", kind = "bool",
       help = "true shows a small tag above the game's prompt with the name of the Brassica Primelet you face, or of a hybrid whose name the game's own prompt cannot show. Hybrid trees name themselves in the prompt either way." },
     { key = "primelet_chattiness", default = "normal", kind = "choice", choices = { "off", "quiet", "normal", "chatty" },

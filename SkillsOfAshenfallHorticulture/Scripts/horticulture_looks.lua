@@ -281,6 +281,7 @@ local scriptsDir = nil
 local Placements = require("horticulture_placements")
 local Generic = require("horticulture_hybrid_generic")
 local Primelets = require("horticulture_primelet_looks")
+local Mutation = require("horticulture_mutation")
 
 -- Placement looks: at most CAP pieces per host (instanced, or as actors),
 -- BATCH actors added per refresh. mode "ism" or "actors" (dev toggle).
@@ -471,9 +472,93 @@ end
 
 local function untint(saved)
     for _, s in ipairs(saved or {}) do
-        if U.valid(s.comp) and s.material then pcall(function() s.comp:SetMaterial(s.index, s.material) end) end
+        if U.valid(s.comp) and s.restore then
+            pcall(function() s.mid:SetScalarParameterValue(FName("RandomColor_HueShift"), s.restore.hue) end)
+            for p, c in pairs(s.restore.colors) do pcall(function() s.mid:SetVectorParameterValue(FName(p), c) end) end
+        elseif U.valid(s.comp) and s.material then
+            pcall(function() s.comp:SetMaterial(s.index, s.material) end)
+        end
     end
 end
+
+-- Mutation tint (horticulture_mutation): the host's own leaf (tree) or
+-- plant (crop) materials as dynamic instances with the hybrid's hue shift
+-- and colour multiply. A material that is already a dynamic instance is
+-- changed in place and its values kept to put back.
+Looks.MUTATION = true
+local MUTATION_COLORS = { "Color_Mult_A", "Color_Mult_B" }
+
+local function is_mid(m)
+    return tostring(U.full(m) or ""):find("MaterialInstanceDynamic", 1, true) ~= nil
+end
+
+local function material_path(m)
+    if is_mid(m) then
+        local parent = nil
+        pcall(function() parent = m.Parent end)
+        if U.valid(parent) then return U.full(parent) end
+    end
+    return U.full(m)
+end
+
+local function mutate(h, t)
+    local comps = {}
+    for _, c in ipairs(h.comps or {}) do if U.valid(c) then comps[#comps + 1] = c end end
+    if #comps == 0 and U.valid(h.actor) then comps = mesh_components(h.actor) end
+    local saved = {}
+    for _, comp in ipairs(comps) do
+        local n = 0
+        pcall(function() n = comp:GetNumMaterials() end)
+        for i = 0, math.min(n, 8) - 1 do
+            local original = nil
+            pcall(function() original = comp:GetMaterial(i) end)
+            if U.valid(original) and Mutation.Takes(h.kind, material_path(original)) then
+                local s = { comp = comp, index = i }
+                if is_mid(original) then
+                    s.mid = original
+                    s.restore = { hue = 0, colors = {} }
+                    pcall(function() s.restore.hue = original:K2_GetScalarParameterValue(FName("RandomColor_HueShift")) end)
+                    for _, p in ipairs(MUTATION_COLORS) do
+                        pcall(function() s.restore.colors[p] = original:K2_GetVectorParameterValue(FName(p)) end)
+                    end
+                else
+                    s.material = original
+                    pcall(function() s.mid = comp:CreateDynamicMaterialInstance(i, original, FName("None")) end)
+                end
+                if U.valid(s.mid) then
+                    pcall(function() s.mid:SetScalarParameterValue(FName("RandomColor_HueShift"), t.hue) end)
+                    local c = { R = t.mult.R, G = t.mult.G, B = t.mult.B, A = 1 }
+                    for _, p in ipairs(MUTATION_COLORS) do pcall(function() s.mid:SetVectorParameterValue(FName(p), c) end) end
+                    s.midName = U.full(s.mid)
+                    saved[#saved + 1] = s
+                end
+            end
+        end
+    end
+    return saved
+end
+
+-- True while every tinted slot still shows our instance (the game can
+-- swap a tree's materials, for example when it streams back in).
+local function mutation_holds(saved)
+    for _, s in ipairs(saved or {}) do
+        local now = nil
+        pcall(function() now = s.comp:GetMaterial(s.index) end)
+        if not U.valid(s.comp) or not U.valid(now) or U.full(now) ~= s.midName then return false end
+    end
+    return true
+end
+
+local function apply_mutation(b, g, h, hybridId)
+    if not Looks.MUTATION or not U.valid(h.actor) then return end
+    local Rules = require("horticulture_splice_rules")
+    local key = (g.plants and #g.plants > 2) and Rules.PlantsKey(g.plants) or Rules.ComboKey(g.scion, g.host)
+    local t = Mutation.For(hybridId, key)
+    if not t then return end
+    b.tinted = mutate(h, t)
+    b.mutation = t
+end
+Looks.Mutate, Looks.MutationHolds, Looks.Untint = mutate, mutation_holds, untint
 
 local function scale_comps(comps, factor)
     local saved = {}
@@ -834,6 +919,13 @@ function Looks.Apply(g, h, mode, hybridId)
     local hostName = host_sig(h)
     if b and b.host == hostName and b.mode == mode and U.valid(h.actor) then
         if b.queue then continue_actors(b) end
+        if mode == "hybrid" then
+            if not Looks.MUTATION then
+                if b.tinted then untint(b.tinted) b.tinted, b.mutation = nil, nil end
+            elseif not b.mutation or not mutation_holds(b.tinted) then
+                apply_mutation(b, g, h, hybridId)
+            end
+        end
         b.count = math.max(#b.actors, b.instances or 0)
         return b.count
     end
@@ -849,6 +941,7 @@ function Looks.Apply(g, h, mode, hybridId)
     built[g.id] = b
     local pieces, hostScale = nil, 1.0
     local packaged = mode == "hybrid" and Looks.Packaged(hybridId) or nil
+    if mode == "hybrid" then apply_mutation(b, g, h, hybridId) end
     if mode == "hybrid" and not packaged and apply_placement(world, b, h, hybridId, g) then
         b.count = math.max(#b.actors, b.instances or 0)
         if swayer and b.instances and b.t and b.anchor and h.kind ~= "plot" then
