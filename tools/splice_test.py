@@ -5,6 +5,7 @@ driven with a fake world and ESL.
 usage: python tools/splice_test.py
 """
 import os
+import re
 import sys
 import tempfile
 
@@ -326,16 +327,16 @@ prime = L.eval(r"""function()
     Core.Graft(st, { species = "FPD_Cabbage", kind = "plot", key = "plot:1", stage = 1, tier = 1, x = 0, y = 0, z = 0, world = "W" }, 1)
     local outs = Core.Dawn(st, 1, function(n) return n == 1000 and 500 or 1 end)
     say("plain", outs[1].result, #st.grafts, #st.primelets)
-    -- Forced: the graft becomes a primelet beside the plot.
+    -- A certain roll: the graft becomes a primelet beside the plot.
     Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "b", level = 1, alive = true })
     Core.Graft(st, { species = "FPD_Cabbage", kind = "plot", key = "plot:2", stage = 1, tier = 1, x = 500, y = 0, z = 7, world = "W" }, 1)
-    outs = Core.Dawn(st, 1, function() return 1 end, nil, { forcePrimelet = true })
+    outs = Core.Dawn(st, 1, function() return 1 end, nil, { primeletChance = 100 })
     local p = outs[1].primelet
     say("forced", outs[1].result, #st.grafts, #st.primelets, p.x, p.y, p.z, p.world, P.Name(p))
     -- Cabbage onto potato never becomes one.
     Core.TakeCutting(st, { species = "FPD_Cabbage", kind = "crop", key = "c", level = 5, alive = true })
     Core.Graft(st, { species = "FPD_Potato", kind = "plot", key = "plot:3", stage = 1, tier = 1, x = 900, y = 0 }, 5)
-    outs = Core.Dawn(st, 5, function() return 1 end, nil, { forcePrimelet = true })
+    outs = Core.Dawn(st, 5, function() return 1 end, nil, { primeletChance = 100 })
     say("brassitato", outs[1].result)
     -- Tending and growth.
     local rng = function(n) return 1 end
@@ -724,7 +725,7 @@ ESL = {
     Store = { ProgressFile = function(char, skill) return tmp .. "\\" .. char .. "." .. skill .. ".txt" end },
 }
 S = require("horticulture_splicing")
-S.Start({ ESL = ESL, SKILL = "Horticulture", dir = tmp, actionKey = "G" })
+S.Start({ ESL = ESL, SKILL = "Horticulture", dir = tmp, actionKey = "G", primeletChance = PRIMELET_CHANCE })
 local t0 = 0
 os.clock = function() t0 = t0 + 10 return t0 end
 function tick() for _, fn in ipairs(loops) do fn() end end
@@ -897,9 +898,10 @@ c = g.take("cards")
 check("a common potato cutting is refused by a planted ash, saying where prime ones come from",
       "CANNOT GRAFT|Trees only take a prime cutting" in c and g.take("xp") == "", c)
 
-# Brassica Primelet in the world: graft, forced reveal, tend, carry, set down.
+# Brassica Primelet in the world: graft, certain reveal, tend, carry, set down.
 drop(save)
 L = fresh()
+L.globals().PRIMELET_CHANCE = 100
 L.execute(GLUE, SCRIPTS, TMP)
 g = L.globals()
 c1 = g.plot("FPD_Cabbage", 1, 2000)
@@ -912,7 +914,6 @@ g.press("G")
 x = g.take("xp")
 check("cabbage onto cabbage grafts", "Graft made=20" in x, x)
 g.take("cards")
-g.S.ForcePrimelet()
 g.S.Dawn("test")
 for _ in range(6):
     g.tick()
@@ -965,23 +966,6 @@ L2 = fresh()
 L2.execute(GLUE, SCRIPTS, TMP)
 pl = L2.eval('(function() local st = require("horticulture_splicing").State() return #st.primelets .. " " .. tostring(st.primelets[1].carried) .. " " .. st.primelets[1].x end)()')
 check("restart keeps the Primelet where it was set down", pl == "1 false 120", pl)
-
-# The dev force key seeds a graft ahead of a player with no cabbage plots.
-drop(save)
-L = fresh()
-L.execute(GLUE, SCRIPTS, TMP)
-g = L.globals()
-g.nearby = L.table_from([])
-g.S.ForcePrimelet()
-g.S.ForcePrimelet()
-n = L.eval('(function() return #require("horticulture_splicing").State().grafts end)()')
-check("dev force seeds one cabbage graft", n == 1, n)
-g.S.Dawn("test")
-for _ in range(6):
-    g.tick()
-check("seeded graft becomes a Primelet ahead of the player", "hybrid:BrassicaPrimelet=200" in g.take("awards"))
-ap = g.take("applied")
-check("seeded Primelet two metres ahead", "prime:p" in ap and ":200,0,sprout," in ap, ap)
 
 # Action Wheel (optional companion) ----------------------------------------
 WHEEL = r"""
@@ -1636,7 +1620,7 @@ store = L.eval(r"""function()
     local out = { string.format("%s|%s|%s|%s|%d|%d|%d|%s|%s|%s", q.personality, q.name, tostring(q.potted), tostring(q.carried), q.talked, q.ign, q.seen,
         table.concat(keys, ","), tostring(back.pmflag1), tostring(back.lastSeen)) }
     local text = Store.Serialize(st)
-    out[#out + 1] = "neutral " .. tostring(not text:lower():find("ring") and not text:lower():find("summon"))
+    out[#out + 1] = "save " .. (text:gsub("\n", "\t"))
     local old = Store.Parse("version=2\ndawn=3\nnextid=5\nprimelet=p1|3|5|2|0|W|10|20|30|0|0\nprimelet=p2|1|0|-1|1|W|1|1|1|0|0\n")
     out[#out + 1] = string.format("old %d %s %s", #old.primelets, tostring(old.primelets[1].personality), tostring(old.primelets[1].potted))
     local n = P.Migrate(old, function(k) return 1 end)
@@ -1659,7 +1643,18 @@ store = L.eval(r"""function()
 end""")().split("\n")
 check("save keeps personality, name, pot, talked, ignored tier, seen, said lines, and the file flags",
       store[0] == "pompous|Lord Savoy|true|false|4|2|5|0000beef,abcd1234|true|1790000000", store[0])
-check("save keys are neutral", store[1] == "neutral true", store[1])
+SECRECY_FILE = os.path.join(ROOT, "tools", "local", "secrecy_terms.txt")
+SECRECY = {}
+if os.path.exists(SECRECY_FILE):
+    for line in open(SECRECY_FILE, encoding="utf-8"):
+        scope, _, rx = line.strip().partition(" ")
+        if rx and not scope.startswith("#"):
+            SECRECY.setdefault(scope, []).append(rx)
+if SECRECY:
+    leaked = [rx for rx in SECRECY.get("save", []) if re.search(rx, store[1], re.I)]
+    check("save keys are neutral", store[1].startswith("save ") and not leaked, leaked)
+else:
+    print("SKIP save keys are neutral: no tools/local/secrecy_terms.txt")
 check("older save rows still load", store[2] == "old 2 nil false", store[2])
 check("migration rolls a personality and a different name for each", store[3] == "migrated 2 true true named", store[3])
 check("migration runs once", store[4] == "again 0", store[4])
@@ -1873,27 +1868,27 @@ check("mutation: an existing dynamic instance is tinted in place and its values 
 check("mutation: untint puts the original material back", mut[10].endswith("set 1 MaterialInstanceConstant /Game/MI_Ash_Leaves"), mut[10])
 check("config: mutation_tint defaults on and can be turned off", mut[11] == "cfg true false", mut[11])
 
-# Secrecy: nothing a player sees mentions what five Minis are for ----------
-import re  # noqa: E402
+# Secrecy: no unreleased design words in anything a player sees ------------
 SHIP = os.path.join(ROOT, "SkillsOfAshenfallHorticulture")
+DOCS = ("README.md", "CHANGELOG.md", "horticulture_config.lua", "horticulture_perks.lua")
 bad = []
 for dirpath, _, files in os.walk(SHIP):
     for fn in files:
-        if re.search(r"summon|ritual", fn, re.I):
-            bad.append("file name " + fn)
+        bad += ["file name " + fn for rx in SECRECY.get("name", []) if re.search(rx, fn, re.I)]
         if not fn.endswith((".lua", ".md", ".txt")):
             continue
         p = os.path.join(dirpath, fn)
         text = open(p, encoding="utf-8", errors="replace").read()
         rel = os.path.relpath(p, SHIP)
-        for word in [r"summon", r"ritual", r"post_v1", r"V\.RITUAL"]:
-            if re.search(word, text, re.I):
-                bad.append(rel + ": " + word)
-        if fn == "horticulture_primelet_voice.lua" and re.search(r"min = 75|master", text):
-            bad.append(rel + ": 75+ band")
-        if fn in ("README.md", "CHANGELOG.md", "horticulture_config.lua", "horticulture_perks.lua") and re.search(r"\b(ring|circle|five minis|level 75)\b", text, re.I):
-            bad.append(rel + ": ring/circle")
-check("secrecy: no summoning, ritual or post-v1 text shipped; README, CHANGELOG, config and perks never mention a ring", not bad, bad)
+        bad += [rel + ": text term" for rx in SECRECY.get("text", []) if re.search(rx, text, re.I)]
+        if fn == "horticulture_primelet_voice.lua":
+            bad += [rel + ": voice term" for rx in SECRECY.get("voice", []) if re.search(rx, text)]
+        if fn in DOCS:
+            bad += [rel + ": docs term" for rx in SECRECY.get("docs", []) if re.search(rx, text, re.I)]
+if SECRECY:
+    check("secrecy: no unreleased design words in shipped files (tools/local/secrecy_terms.txt)", not bad, bad)
+else:
+    print("SKIP secrecy: no tools/local/secrecy_terms.txt")
 
 # Rootstock: prime cuttings, vigour, yields --------------------------------
 L = fresh()

@@ -209,7 +209,7 @@ end
 
 local function award(kind, id, net)
     local gain = repeatable(kind, id)
-    if gain and (cfg.dev or cfg.debug) then U.log("XP " .. kind .. " +" .. gain) end
+    if gain and cfg.debug then U.log("XP " .. kind .. " +" .. gain) end
     if net and kind == "plant" then first_sowing(net) end
     if net and kind == "harvest" then catalogue(net) end
 end
@@ -326,13 +326,5 @@ function Training.CatalogueLine()
     if #names == 0 then return "Vanilla Plants: no crops yet" end
     return string.format("Vanilla Plants %d/%d: %s", #names, Crops.TOTAL, table.concat(names, ", "))
 end
-
--- For the dev dump.
-function Training.Status()
-    return string.format("hooks %s, fired %s, server %s, proximity %s, plots in range %d",
-        tostring(hooksOk), tostring(hookFired), tostring(is_server()), tostring(forceProximity), #slots)
-end
-
-function Training.Slots() return slots end
 
 return Training

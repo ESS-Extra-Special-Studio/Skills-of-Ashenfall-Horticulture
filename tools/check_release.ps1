@@ -1,19 +1,18 @@
-# Release check: no developer switches in the mod folder, Lua passes the
-# static checks. Run from the repo root before packaging.
+# Release check: required files present, nothing local tracked, Lua passes
+# the static checks. Run from the repo root before packaging.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $mod = Join-Path $root "SkillsOfAshenfallHorticulture"
 $failed = $false
 
-foreach ($name in @("dev.txt", "dev-unlock.txt", "showcase.txt", "spike.txt", "book-mesh.txt")) {
-    if (Test-Path (Join-Path $mod $name)) {
-        Write-Host "FAIL: $name is in the mod folder; remove it before release"
-        $failed = $true
-    }
-}
 # The game writes config.txt on first run; tools\package.ps1 never packs it.
 if (git -C $root ls-files -- "SkillsOfAshenfallHorticulture/config.txt") {
     Write-Host "FAIL: config.txt is tracked by git"
+    $failed = $true
+}
+$local = git -C $root ls-files -- "SkillsOfAshenfallHorticulture" | Where-Object { $_ -match '(^|/)(dev|debug)[^/]*\.(txt|lua)$' }
+if ($local) {
+    Write-Host "FAIL: local-only files are tracked: $($local -join ', ')"
     $failed = $true
 }
 foreach ($name in @("Scripts\main.lua", "Textures\horticulture-skill-icon.png", "enabled.txt", "LICENSE", "README.md")) {
@@ -27,16 +26,12 @@ if (-not (Select-String -Path (Join-Path $mod "Scripts\main.lua") -SimpleMatch '
     Write-Host "FAIL: the skill id in main.lua is not Horticulture"
     $failed = $true
 }
-# The spike module may ship (it only loads with spike.txt), but the prize
-# effect stays off until the in-game spike proves it.
+# The prize effect stays off until it is proven in game.
 if (Select-String -Path (Join-Path $mod "Scripts\horticulture_prize.lua") -SimpleMatch "Prize.ENABLED = true" -Quiet) {
-    Write-Host "WARN: prize specimens are on; ship only if step S6 of the test window passed"
+    Write-Host "WARN: prize specimens are on; ship only if they were checked in game"
 }
 if (Test-Path (Join-Path $mod "meshes.txt")) {
     Write-Host "WARN: meshes.txt points hybrids at other mesh paths; it is never packed"
-}
-if (Test-Path (Join-Path $mod "placement.txt")) {
-    Write-Host "WARN: placement.txt overrides the default book spot; ship it only if it was checked in game"
 }
 
 $py = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"

@@ -111,7 +111,7 @@ if withAddXp then
     end
 end
 Training = require("horticulture_training")
-Training.Start({ ESL = ESL, SKILL = "Horticulture", dev = false })
+Training.Start({ ESL = ESL, SKILL = "Horticulture" })
 
 function step()
     for _, fn in ipairs(loops) do fn() end

@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.join(ROOT, "tools", "pylib"))
 from lupa import lua54  # noqa: E402
 
 MOD = os.path.join(ROOT, "SkillsOfAshenfallHorticulture")
-ESL = r"<user>\IdeaProjects\ESL-DragonWilds\ESLDragonWilds"
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+from local_paths import ESL_MOD as ESL  # noqa: E402
 SANDBOX = os.path.join(ROOT, "tools", "out", "sandbox")
 
 
@@ -80,7 +81,7 @@ end
 """
 
 
-SWITCHES = ("dev.txt", "dev-unlock.txt", "showcase.txt", "spike.txt", "book-mesh.txt", "placement.txt", "config.txt")
+LOCAL_FILES = ("config.txt", "dev.txt", "debug.txt")
 
 
 def boot(files=()):
@@ -98,7 +99,7 @@ def boot(files=()):
     os.makedirs(os.path.join(SANDBOX, "ESLDragonWilds", "Saves"), exist_ok=True)
     os.makedirs(os.path.join(SANDBOX, "LocalAppData", "RSDragonwilds", "Saved"), exist_ok=True)
     shutil.copytree(MOD, os.path.join(SANDBOX, "SkillsOfAshenfallHorticulture"),
-                    ignore=shutil.ignore_patterns(*SWITCHES))
+                    ignore=shutil.ignore_patterns(*LOCAL_FILES))
     for name in files:
         open(os.path.join(SANDBOX, "SkillsOfAshenfallHorticulture", name), "w").close()
     print("--- boot", ("with " + ", ".join(files)) if files else "release")
@@ -136,8 +137,6 @@ def boot(files=()):
 
 if __name__ == "__main__":
     failures = syntax()
-    failures += boot(("dev.txt", "dev-unlock.txt", "spike.txt"))
-    failures += boot(("showcase.txt",))
     failures += boot()
     print("RESULT", "FAIL" if failures else "PASS")
     sys.exit(1 if failures else 0)

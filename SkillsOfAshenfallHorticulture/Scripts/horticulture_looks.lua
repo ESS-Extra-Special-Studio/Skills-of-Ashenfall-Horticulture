@@ -285,7 +285,7 @@ local FruitLayers = require("horticulture_fruit_layers")
 local Mutation = require("horticulture_mutation")
 
 -- Placement looks: at most CAP pieces per host (instanced, or as actors),
--- BATCH actors added per refresh. mode "ism" or "actors" (dev toggle).
+-- BATCH actors added per refresh. mode "ism" or "actors".
 Looks.CAP = { ism = 128, actors = 40 }
 Looks.BATCH = 24
 Looks.mode = "ism"
@@ -433,14 +433,6 @@ local function spawn(world, mesh, loc, rot, scale)
     local s = type(scale) == "table" and scale or { X = scale, Y = scale, Z = scale }
     pcall(function() actor:SetActorScale3D(s) end)
     return actor
-end
-
--- Dev showcase: a vanilla mesh as a stand-in host.
-function Looks.SpawnMesh(path, loc, rot, scale)
-    local mesh = load(path)
-    local world = UEHelpers.GetWorld()
-    if not mesh or not U.valid(world) then return nil end
-    return spawn(world, mesh, loc, rot or { Pitch = 0, Yaw = 0, Roll = 0 }, scale or 1)
 end
 
 -- Host size from its bounds; defaults when they cannot be read.
@@ -719,11 +711,6 @@ end
 
 function Looks.SwayCount() return swayer and swayer:count() or 0 end
 
-function Looks.SetSwayDegrees(d)
-    if swayer then swayer.cfg.base_deg = d end
-    return swayer ~= nil
-end
-
 function Looks.Clear(graftId)
     if swayer then swayer:remove(graftId) end
     local b = built[graftId]
@@ -797,26 +784,11 @@ function Looks.KeepFelledTint(graftId)
     return true
 end
 
--- Dev: mutation tints off and on again, for before/after comparisons.
-function Looks.DevToggleMutation()
-    Looks.MUTATION = not Looks.MUTATION
-    local n = 0
-    for _, b in pairs(built) do
-        if b.mutationHost then
-            untint(b.tinted)
-            b.tinted = Looks.MUTATION and mutate(b.mutationHost, b.mutation) or nil
-            n = n + 1
-        end
-    end
-    U.log(string.format("[dev] mutation tints %s on %d hybrid(s)", Looks.MUTATION and "on" or "off", n))
-end
-
 function Looks.ClearAll()
     for id in pairs(built) do Looks.Clear(id) end
 end
 
 function Looks.Built(graftId) return built[graftId] end
-function Looks.ScriptsDir() return scriptsDir end
 
 -- Builds the look for graft g on host h = { actor, kind, loc, comps }
 -- (comps: the meshes to tint and scale; plots pass the plant mesh).

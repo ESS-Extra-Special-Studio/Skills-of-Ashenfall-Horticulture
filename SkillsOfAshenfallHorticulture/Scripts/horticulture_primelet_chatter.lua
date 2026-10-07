@@ -347,25 +347,4 @@ function Chatter.PollSeconds() return V.TIMING.ambient_poll_s end
 function Chatter.SetChattiness(name) if eng then eng:SetChattiness(name) end end
 function Chatter.Engine() return eng end
 
--- Developer only: the Mini nearest the player says something now, gaps
--- ignored (trigger defaults to "talk").
-function Chatter.DevSay(trigger)
-    local st = hooks.state()
-    if not st then return nil end
-    local list = {}
-    for _, p in ipairs(Primelet.Visible(st, World.WorldKey())) do list[#list + 1] = p end
-    local p = nearest(list, me())
-    if not p then U.log("[DEV] No Primelet here") return nil end
-    if not Primelet.Grown(p) then
-        local text = Chatter.Narration(p, "talk")
-        U.log("[DEV] " .. Primelet.Name(p) .. " is not grown: " .. tostring(text))
-        return text
-    end
-    eng.bubbleUntil, eng.lastAny = -math.huge, -math.huge
-    eng.lastSpoke[p.id] = nil
-    local text, _, pool, line = eng:Line(p, trigger or "talk", ctx_for(p))
-    if not text then U.log("[DEV] " .. Primelet.Name(p) .. " has nothing to say for " .. tostring(trigger)) return nil end
-    return show(p, text, line, pool)
-end
-
 return Chatter

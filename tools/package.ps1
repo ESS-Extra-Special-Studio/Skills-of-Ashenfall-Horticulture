@@ -1,10 +1,9 @@
 # Builds the release zip for Skills of Ashenfall: Horticulture from an allowlist.
 #
 # Only files tracked by git AND matching $Allow are packed, so local files
-# (dev.txt, dev-unlock.txt, spike.txt, showcase.txt, config.txt, logs) can
-# never ship; config.txt is written with defaults on first run. placement.txt
-# ships only once a verified book position is committed. The zip holds one SkillsOfAshenfallHorticulture folder, ready to
-# drop into Content\Paks\~mods next to ESLDragonWilds and
+# (config.txt, meshes.txt, logs) can never ship; config.txt is written with
+# defaults on first run. The zip holds one SkillsOfAshenfallHorticulture
+# folder, ready to drop into Content\Paks\~mods next to ESLDragonWilds and
 # SkillsOfAshenfallHistorian. Run tools\check_release.ps1 first.
 #   powershell -File tools\package.ps1 -Version 1.0.0
 param([Parameter(Mandatory = $true)][string]$Version)
@@ -15,7 +14,6 @@ $mod = 'SkillsOfAshenfallHorticulture'
 
 $Allow = @(
     "^$mod/enabled\.txt$",
-    "^$mod/placement\.txt$",
     "^$mod/(README|CHANGELOG)\.md$",
     "^$mod/LICENSE$",
     "^$mod/Scripts/[a-z_]+\.lua$",
@@ -24,12 +22,10 @@ $Allow = @(
     "^$mod/SoAHorticulture_P\.(pak|ucas|utoc)$",
     "^$mod/Textures/[a-z0-9-]+\.png$"
 )
-$Never = '(^|/)(dev|dev-unlock|spike|showcase|book-mesh|debug|config)\.txt$|\.log$|\.tmp$'
-# main.lua requires these only when dev.txt or spike.txt is present.
-$DevOnly = "^$mod/Scripts/horticulture_(dev|spike)\.lua$"
+$Never = '(^|/)(dev|debug|config)\.txt$|\.log$|\.tmp$'
 
 $tracked = git ls-files
-$files = $tracked | Where-Object { $f = $_; ($Allow | Where-Object { $f -match $_ }).Count -gt 0 } | Where-Object { $_ -notmatch $DevOnly }
+$files = $tracked | Where-Object { $f = $_; ($Allow | Where-Object { $f -match $_ }).Count -gt 0 }
 $bad = $files | Where-Object { $_ -match $Never }
 if ($bad) { throw "Refusing to pack: $($bad -join ', ')" }
 foreach ($need in "$mod/enabled.txt", "$mod/Scripts/main.lua", "$mod/Textures/horticulture-skill-icon.png", "$mod/README.md", "$mod/LICENSE") {

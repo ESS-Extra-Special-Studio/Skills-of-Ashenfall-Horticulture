@@ -44,31 +44,13 @@ local Training = require("horticulture_training")
 local Splicing = require("horticulture_splicing")
 local Perks = require("horticulture_perks")
 
--- dev.txt turns on the developer keys. dev-unlock.txt as well drops the
--- Historian and Farming requirements, for testing on a fresh character; the
--- book is still required. showcase.txt drops them too, with no developer
--- keys, for recording the unlock on a low-level character. spike.txt logs
--- farming hooks and plot state for the in-game spike. None of these files
--- ships (tools\check_release.ps1).
-local DEV = U.exists(dir .. "\\..\\dev.txt")
-local SHOWCASE = U.exists(dir .. "\\..\\showcase.txt")
-local DEV_UNLOCK = (DEV and U.exists(dir .. "\\..\\dev-unlock.txt")) or SHOWCASE
-local SPIKE = U.exists(dir .. "\\..\\spike.txt")
-local FORCE_MESH = U.exists(dir .. "\\..\\book-mesh.txt")
-
 ESL.Depends(ESL.HISTORIAN, "1.0.0", MOD)
 
-local BOOK_REQUIREMENT = { book = BOOK_ID, label = "the Observances of Brassica Prime" }
 local requires = {
     { skill = ESL.HISTORIAN, level = 25 },
     { vanilla = "Farming", level = 25 },
-    BOOK_REQUIREMENT,
+    { book = BOOK_ID, label = "the Observances of Brassica Prime" },
 }
-if DEV_UNLOCK then
-    requires = { BOOK_REQUIREMENT }
-    log("[DEV] " .. (SHOWCASE and "showcase.txt" or "dev-unlock.txt")
-        .. ": Historian 25 and Farming 25 are not required in this session. Never ship this file.")
-end
 
 local Settings = require("horticulture_config").Load(dir, log)
 local STATUS_KEY = Settings.status_key
@@ -91,7 +73,7 @@ ESL.RegisterSkill({
         .. "Trees are fussier: they only take a prime cutting, from a watered, composted crop in a plot of the right tier, and rest after a few picks. Tree cuttings need an axe that could fell the tree, "
         .. "and won't take on a crop. Ordinary farming still pays a little.",
     requires = requires,
-    perks = Perks.Rows(DEV),
+    perks = Perks.Rows(),
 })
 
 -- The world prompt on our own book shows the Historian level it needs.
@@ -102,9 +84,6 @@ local config = {
     SKILL = SKILL,
     BOOK_ID = BOOK_ID,
     dir = dir,
-    dev = DEV,
-    devUnlock = DEV_UNLOCK,
-    forceMesh = FORCE_MESH,
     quiet = Settings.quiet,
     debug = Settings.debug,
     actionKey = Settings.action_key,
@@ -221,19 +200,7 @@ RegisterKeyBindAsync(Key[STATUS_KEY], { ModifierKey.SHIFT }, function()
     Book.Reread()
 end)
 
-if SPIKE then
-    require("horticulture_spike").Start(config)
-end
-
-if DEV then
-    local Dev = require("horticulture_dev")
-    Dev.Start(config, Book, Training, Splicing)
-    RegisterKeyBindAsync(Key.F2, Dev.SHIFT_ALT, function() ESL.TestNotifications(SKILL) end)
-    RegisterKeyBindAsync(Key.F3, Dev.SHIFT_ALT, function() ESL.SelectInSkillsMenu(SKILL) end)
-end
-
 log("Loaded " .. VERSION .. ". " .. STATUS_KEY .. " shows Horticulture, Shift+" .. STATUS_KEY
     .. " rereads the Observances, " .. Settings.action_key .. " takes cuttings and grafts (Alt+" .. Settings.action_key
     .. " cutting only, Shift+" .. Settings.action_key .. " next cutting)."
-    .. (WHEEL and " The same actions are on the Action Wheel." or "") .. (Settings.quiet and " Quiet mode is on." or "")
-    .. (DEV and " Developer keys on." or ""))
+    .. (WHEEL and " The same actions are on the Action Wheel." or "") .. (Settings.quiet and " Quiet mode is on." or ""))

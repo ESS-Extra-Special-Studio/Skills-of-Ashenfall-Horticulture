@@ -6,8 +6,7 @@
 -- Verified in build 25632050 (exe reflection names): PlantMeshComponent and
 -- PlantMeshComponentRef among the farm plot's properties. Not verified: which
 -- object holds the component, and whether the game resets its scale; the
--- scale is re-applied on every check. Off until the in-game spike shows it
--- works (docs/HORTICULTURE_TEST_WINDOW.md, step S6).
+-- scale is re-applied on every check. Off in 1.0.0.
 local U = require("horticulture_util")
 
 local Prize = {}

@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.join(ROOT, "tools", "pylib"))
 from lupa import lua54  # noqa: E402
 
 SCRIPTS = os.path.join(ROOT, "SkillsOfAshenfallHorticulture", "Scripts")
-CURVE = r"<user>\IdeaProjects\ESL-DragonWilds\ESLDragonWilds\Scripts\curve.lua"
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+from local_paths import ESL_CURVE as CURVE  # noqa: E402
 CAP = 3152
 
 lua = lua54.LuaRuntime()

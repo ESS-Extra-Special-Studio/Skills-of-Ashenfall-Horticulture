@@ -5,10 +5,14 @@ Read-only. Uses DragonwildsAssets' IoStore reader.
 
 Usage: python recipe_names.py <path substring> [<path substring> ...]
 """
+import os
 import re
 import sys
 
-sys.path.insert(0, r"<user>\IdeaProjects\DragonwildsAssets\scripts\vanilla")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from local_paths import ASSETS_VANILLA  # noqa: E402
+
+sys.path.insert(0, ASSETS_VANILLA)
 import iostore_read  # noqa: E402
 
 CHUNK_EXPORT_BUNDLE = 1

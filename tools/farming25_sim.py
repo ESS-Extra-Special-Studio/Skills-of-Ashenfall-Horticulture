@@ -27,7 +27,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools", "pylib"))
 from lupa import lua54  # noqa: E402
 
-CURVE = r"<user>\IdeaProjects\ESL-DragonWilds\ESLDragonWilds\Scripts\curve.lua"
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+from local_paths import ESL_CURVE as CURVE  # noqa: E402
 
 
 def load_curve():

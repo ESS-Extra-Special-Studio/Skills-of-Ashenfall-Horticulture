@@ -167,7 +167,7 @@ Core.PRIMELET_OFFSET = 90
 
 -- One dawn. rng(n) returns 1..n. alive(g) returns false when the host is
 -- known to be gone (harvested, felled, dug up), nil when unknown.
--- opts: { primeletChance (percent), forcePrimelet }.
+-- opts: { primeletChance (percent) }.
 -- Returns outcomes { graft, result = "takes"|"rejected"|"lost"|"primelet",
 -- chance, primelet }, the cuttings that wilted and the primelets that grew
 -- a stage.
@@ -185,7 +185,7 @@ function Core.Dawn(st, level, rng, alive, opts)
                 if rng(100) <= chance then
                     st.firstTaken = true
                     local primeChance = opts.primeletChance or Rules.PRIMELET.chance
-                    if Core.IsPrimeletGraft(g) and (opts.forcePrimelet or Primelet.Roll(rng, primeChance)) then
+                    if Core.IsPrimeletGraft(g) and Primelet.Roll(rng, primeChance) then
                         local p = Primelet.New(st, (g.x or 0) + Core.PRIMELET_OFFSET, g.y or 0, g.z or 0, g.world, rng)
                         outcomes[#outcomes + 1] = { graft = g, result = "primelet", chance = chance, primelet = p }
                     else

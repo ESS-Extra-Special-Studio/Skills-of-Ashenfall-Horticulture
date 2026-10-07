@@ -240,23 +240,6 @@ function World.Nearby(center, range)
     return out
 end
 
--- Developer aid: the game's wild crop spawners (BP_Spawner_Potato_C and the
--- like) within range, for finding a plant to take a cutting from.
-local SPAWNERS = { "BP_Spawner_Potato_C", "BP_Spawner_Cabbage_C", "BP_Spawner_Onion_C", "BP_Spawner_Wheat_C" }
-function World.WildSpawners(center, range)
-    local out = {}
-    for _, cls in ipairs(SPAWNERS) do
-        for _, a in ipairs(U.live_of(cls)) do
-            local loc = U.location(a)
-            local species = World.CropFromName(cls)
-            if loc and species and U.dist2d(loc, center) <= range then
-                out[#out + 1] = { species = species, loc = loc, actor = a }
-            end
-        end
-    end
-    return out
-end
-
 -- The interaction prompt the game shows for what the player looks at, when
 -- it names a crop ("Potato", "Cabbage"): wild plants drawn as foliage have
 -- no actor of their own until the game makes one for the prompt.
@@ -462,19 +445,6 @@ function World.HeldAxe()
         end
     end
     return nil
-end
-
--- Developer dump: the player's loadout, slot by slot.
-function World.DumpEquipment()
-    local comp = loadout()
-    if not comp then
-        U.log(string.format("[splice] no LoadoutComponent owned by the player (%d live)", #U.live_of("LoadoutComponent")))
-        return
-    end
-    U.log("[splice] loadout " .. U.full(comp))
-    for _, item in ipairs(loadout_items(comp)) do
-        U.log(string.format("[splice]   slot %d: %s", item.slot, item.name))
-    end
 end
 
 -- Hour of the in-game clock (0-24, fractional), or nil.

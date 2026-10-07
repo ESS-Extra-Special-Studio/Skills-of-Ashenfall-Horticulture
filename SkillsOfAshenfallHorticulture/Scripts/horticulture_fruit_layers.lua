@@ -48,7 +48,7 @@ function F.Load(folder)
     return false
 end
 
--- Installs a manifest table directly (tests, dev).
+-- Installs a manifest table directly (tests).
 function F.Set(t, file)
     data = { byHybrid = {}, byProduce = {}, file = file, count = 0 }
     for _, e in ipairs(t and t.layers or {}) do

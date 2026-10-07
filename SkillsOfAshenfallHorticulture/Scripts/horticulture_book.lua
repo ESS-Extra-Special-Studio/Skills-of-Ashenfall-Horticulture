@@ -71,7 +71,6 @@ local function in_world()
 end
 
 local function can_decipher()
-    if cfg.devUnlock then return true end
     return (cfg.ESL.MeetsRequirements({ { skill = cfg.ESL.HISTORIAN, level = 25 } }))
 end
 
@@ -309,14 +308,12 @@ local function spawn_book()
     local world = UEHelpers.GetWorld()
     if not U.valid(world) then return end
     local actor = nil
-    if not cfg.forceMesh then
-        local cls = load_object(LORE_ITEM)
-        if cls then
-            local ok, a = pcall(function() return world:SpawnActor(cls, loc, rot) end)
-            if ok and U.valid(a) then actor, bookMode = a, "loreitem" end
-        end
-        if not actor then U.log_once("noloreitem", "BP_LoreItem did not spawn; using the plain lore book model") end
+    local cls = load_object(LORE_ITEM)
+    if cls then
+        local ok, a = pcall(function() return world:SpawnActor(cls, loc, rot) end)
+        if ok and U.valid(a) then actor, bookMode = a, "loreitem" end
     end
+    if not actor then U.log_once("noloreitem", "BP_LoreItem did not spawn; using the plain lore book model") end
     if not actor then
         local ok, a = pcall(spawn_mesh, world, loc, rot)
         if ok and U.valid(a) then actor, bookMode = a, "mesh" end
@@ -616,7 +613,7 @@ end
 
 function Book.Start(config)
     cfg = config
-    place = Placement.Load(cfg.dir)
+    place = Placement.Load()
     U.log(string.format("Brassica Prime book: %s at %.0f, %.0f%s. It appears within %d m.",
         place.source or "?", place.x, place.y, place.z and string.format(", %.0f", place.z) or "", SPAWN_RANGE // 100))
     U.every(1000, "Book check", function() U.game(ensure_book) end)
@@ -638,27 +635,6 @@ function Book.Reread()
         return
     end
     read(false)
-end
-
--- Developer helpers ------------------------------------------------------
-
-function Book.Actor() return book, bookMode end
-function Book.Place() return place end
-
-function Book.SetPlace(p)
-    place = p
-    groundZ, groundUp = nil, nil
-    if U.valid(book) then pcall(function() book:K2_DestroyActor() end) end
-    book = nil
-    spawnFailures = 0
-end
-
-function Book.OpenNow()
-    read(false)
-end
-
-function Book.Template()
-    return template_entry()
 end
 
 return Book

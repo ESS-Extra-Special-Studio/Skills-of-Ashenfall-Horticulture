@@ -5,9 +5,8 @@
 -- Default keys avoid what this install already binds: F10 and Tilde
 -- (ConsoleEnabler), Insert (BPModLoader), Ctrl+R hot reload, Ctrl+O UE4SS GUI,
 -- Ctrl+J, Ctrl+H and Ctrl+Numpad 5-9 (Keybinds), F3 (LineTrace), HOME
--- (ExampleSkill), F7 and F5/F6/F8/F9/F11 (Historian and its developer keys),
--- F9 (the HUD mod) and F12 (Steam screenshots). Ctrl+Alt+G belongs to the
--- studio's internal dev tool only.
+-- (ExampleSkill), F7 (Historian), F9 (the HUD mod) and F12 (Steam
+-- screenshots).
 local Config = {}
 
 local FIELDS = {

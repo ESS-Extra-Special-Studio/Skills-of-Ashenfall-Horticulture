@@ -85,11 +85,4 @@ end
 
 function Tag.Text() return visible and shownText or nil end
 
--- Moves the tag; it is rebuilt at the new place on its next showing.
-function Tag.SetOffset(x, y)
-    Tag.offset = { X = x, Y = y }
-    if valid(root) then pcall(function() root:RemoveFromParent() end) end
-    root, label, shownText, visible = nil, nil, nil, false
-end
-
 return Tag

@@ -6,7 +6,7 @@
 -- and GetDatasForNetIds; FarmPlantDataAsset.DisplayName (Text). Shipped crop
 -- assets: 24 FPD_* under /Game/Gameplay/Farming/Plants (FPD_Weeds excluded).
 -- Not verified: whether those functions and the map can be called or read
--- from Lua. Each way is tried in turn; the spike log names the one that works.
+-- from Lua. Each way is tried in turn; the log names the one that works.
 local U = require("horticulture_util")
 
 local Crops = {}

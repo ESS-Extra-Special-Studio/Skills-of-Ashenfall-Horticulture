@@ -1,13 +1,24 @@
 # Tool output and local helpers
 tools/out/
 tools/pylib/
+__pycache__/
 
-# Developer switches never ship (tools/check_release.ps1)
-SkillsOfAshenfallHorticulture/dev.txt
-SkillsOfAshenfallHorticulture/dev-unlock.txt
-SkillsOfAshenfallHorticulture/book-mesh.txt
-SkillsOfAshenfallHorticulture/showcase.txt
-SkillsOfAshenfallHorticulture/spike.txt
+# Local-only files: dev tooling, switches, save helpers, machine paths
+**/dev_prob[e]*
+**/devkey[s]*
+**/dev-keys*
+**/dev.txt
+**/dev-unlock.txt
+**/debug.txt
+SkillsOfAshenfallHorticulture/*.txt
+!SkillsOfAshenfallHorticulture/enabled.txt
+SkillsOfAshenfallHorticulture/Scripts/horticulture_dev.lua
+SkillsOfAshenfallHorticulture/Scripts/horticulture_spike.lua
+tools/backup_saves.ps1
+tools/restore_test_saves.ps1
+tools/local/
+tools/local_paths.txt
+.cursor/
 
 # Written on first run with the player's own keys and settings
 SkillsOfAshenfallHorticulture/config.txt

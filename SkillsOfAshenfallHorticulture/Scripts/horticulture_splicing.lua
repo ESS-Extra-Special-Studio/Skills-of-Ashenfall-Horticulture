@@ -39,7 +39,6 @@ local cards = {}
 local nextCardAt = 0
 local plotStage = {}
 local hostsCache = { at = -100, list = {} }
-local forcePrimelet = false
 local shownPrimelets = {}
 
 local function now() return os.clock() end
@@ -98,16 +97,12 @@ end
 -- The character's vanilla levels that gate splicing (Rules.SkillCheck), from
 -- the game's own save through ESL; a few seconds old at most.
 local skillCache = { at = -100 }
-local skillOverride = nil
 local function skills()
     if now() - skillCache.at < 5 then return skillCache.levels end
     local out = {}
-    for k, v in pairs(skillOverride or {}) do out[k] = v end
     for _, name in ipairs({ "Farming", "Woodcutting" }) do
-        if out[name] == nil then
-            local ok, n = pcall(function() return cfg.ESL.GetVanillaLevel and cfg.ESL.GetVanillaLevel(name) end)
-            if ok and type(n) == "number" then out[name] = n end
-        end
+        local ok, n = pcall(function() return cfg.ESL.GetVanillaLevel and cfg.ESL.GetVanillaLevel(name) end)
+        if ok and type(n) == "number" then out[name] = n end
     end
     if not out.Farming then U.log_once("nofarming", "Vanilla Farming level not readable; splicing is not gated by it") end
     skillCache = { at = now(), levels = out }
@@ -197,7 +192,7 @@ local function xp(amount, label)
     if ESL.AddXp then gain, old, new = ESL.AddXp(cfg.SKILL, amount, label)
     else gain, old, new = ESL.Award(cfg.SKILL, "splice:" .. label .. ":" .. os.time() .. ":" .. math.random(1e6), amount, label) end
     note_level(old, new)
-    if cfg.dev or cfg.debug then U.log("XP " .. label .. " +" .. tostring(gain)) end
+    if cfg.debug then U.log("XP " .. label .. " +" .. tostring(gain)) end
     return gain
 end
 
@@ -581,7 +576,6 @@ end
 
 local function primelet_born(o)
     local g, p = o.graft, o.primelet
-    forcePrimelet = false
     Looks.Clear(g.id)
     xp(Rules.XP.takes, "Graft took")
     local R = Primelet.REVEAL
@@ -603,7 +597,7 @@ end
 function Splicing.Dawn(reason)
     if not ensure_state() then return end
     local outcomes, wilted, grown = Core.Dawn(st, level(), function(n) return math.random(n) end, alive_check,
-        { primeletChance = cfg.primeletChance, forcePrimelet = forcePrimelet })
+        { primeletChance = cfg.primeletChance })
     save()
     U.log(string.format("Dawn %d (%s): %d graft(s) resolved, %d cutting(s) wilted", st.dawn, reason or "clock", #outcomes, #wilted))
     for _, p in ipairs(grown or {}) do
@@ -1181,126 +1175,8 @@ function Splicing.PendingCount()
     return p, h
 end
 
--- Developer helpers -------------------------------------------------------
-
 function Splicing.State() return ensure_state() end
-
--- Developer only: pretend vanilla levels ({ Farming = 10 }), nil to read the
--- save again. Returns the levels now in use.
-function Splicing.DevSetSkills(levels)
-    skillOverride = levels
-    skillCache.at = -100
-    return skills()
-end
 function Splicing.Save() save() end
-function Splicing.Refresh() hostsCache.at = -100 refresh_looks() refresh_primelets() end
-
--- Developer only: the next cabbage-on-cabbage graft that takes becomes a
--- Brassica Primelet.
--- With no cabbage-on-cabbage graft pending, one is seeded two metres ahead
--- of the player (a character with no farm plots can still test it).
-function Splicing.ForcePrimelet()
-    forcePrimelet = true
-    U.log("[DEV] The next cabbage-on-cabbage graft that takes becomes a Brassica Primelet")
-    if not ensure_state() then return end
-    for _, g in ipairs(st.grafts) do
-        if g.state == "pending" and Core.IsPrimeletGraft(g) then return end
-    end
-    local feet, yaw = World.Facing()
-    if not feet then return end
-    local x = feet.X + math.cos(math.rad(yaw)) * 200 - Core.PRIMELET_OFFSET
-    local y = feet.Y + math.sin(math.rad(yaw)) * 200
-    local g = Store.SetPlants({ id = "g" .. st.nextId, kind = "plot", key = "dev:primelet", state = "pending",
-        made = st.dawn, x = x, y = y, z = World.GroundAt(x + Core.PRIMELET_OFFSET, y, feet.Z), tier = 1, world = World.WorldKey() }, { "FPD_Cabbage", "FPD_Cabbage" })
-    st.nextId = st.nextId + 1
-    st.grafts[#st.grafts + 1] = g
-    save()
-    U.log(string.format("[DEV] Seeded cabbage-on-cabbage graft %s; the Primelet will appear at %.0f, %.0f after dawn", g.id, x + Core.PRIMELET_OFFSET, y))
-end
-
--- Developer only: the planted crop or tree under the crosshair becomes a
--- hybrid of scion now (any graft on it is replaced), for checking real hosts
--- without dawn rolls. False and the reason when there is no such host.
-function Splicing.DevHybrid(scion)
-    if not ensure_state() then return false, "no character" end
-    local c = World.Aimed()
-    if not (c and (c.kind == "plot" or (c.planted and c.kind ~= "stump"))) then return false, "aim at a farm plot or a tree you planted" end
-    if not c.species then return false, "the plant under the crosshair has no species" end
-    local old = Core.GraftOn(st, as_point(c))
-    if old then Core.Remove(st, old) Looks.Clear(old.id) plotStage[old.id] = nil end
-    local h = host_from(c)
-    local g = Store.SetPlants({ id = "g" .. st.nextId, kind = h.kind, state = "hybrid", made = st.dawn - 1,
-        x = h.x, y = h.y, z = h.z, key = h.key, tier = h.tier, world = h.world }, { c.species, scion })
-    if Rules.UsesVigour(g) then g.vigour = Rules.VigourFor(g) end
-    st.nextId = st.nextId + 1
-    st.grafts[#st.grafts + 1] = g
-    save()
-    hostsCache.at = -100
-    refresh_looks()
-    U.log(string.format("[DEV] %s is now %s (%s>%s, %s %s, stage %s)", g.id, Rules.HybridName(scion, c.species), scion, c.species,
-        c.kind, U.full(c.actor or c.obj), tostring(c.stage)))
-    return true
-end
-
--- Developer only: the Primelet nearest the player grows one stage now.
-function Splicing.DevGrowPrimelet()
-    if not ensure_state() then return end
-    local me = U.location(U.pawn())
-    local best, bestD = nil, math.huge
-    for _, p in ipairs(Primelet.Visible(st, World.WorldKey())) do
-        local d = me and U.dist2d({ X = p.x or 0, Y = p.y or 0 }, me) or 0
-        if d < bestD then best, bestD = p, d end
-    end
-    local p = best
-    if not p then U.log("[DEV] No Primelet set down in this world") return end
-    local nextStage = Primelet.STAGES[p.stage + 1]
-    if not nextStage then U.log("[DEV] " .. Primelet.Name(p) .. " is fully grown") return end
-    p.stage, p.growth = p.stage + 1, nextStage.need
-    local detail = Primelet.GROWN[p.stage] or ""
-    local words = Primelet.Grown(p) and Chatter.FirstWords(p)
-    if words then detail = detail .. "\n\nIts first words: \"" .. words .. "\"" end
-    save()
-    refresh_primelets()
-    card("THE PRIMELET HAS GROWN", Primelet.Name(p), detail, 7)
-    U.log(string.format("[DEV] %s %s is now stage %d (%s, %s)", Primelet.Name(p), p.id, p.stage, tostring(p.personality), tostring(p.name)))
-    Chatter.CheckArrangement("grew")
-end
-
-function Splicing.Dump()
-    if not ensure_state() then U.log("[splice] no character") return end
-    U.log(string.format("[splice] dawn %d, hour %s, level %d, file %s", st.dawn, tostring(World.Hour()), level(), path))
-    U.log("[splice] " .. Splicing.SatchelLine() .. " | world " .. World.WorldKey())
-    for _, g in ipairs(st.grafts) do
-        U.log(string.format("[splice] %s %s %s (%s) at %.0f, %.0f made %s picked %s",
-            g.id, g.state, table.concat(g.plants, ">"), g.kind, g.x or 0, g.y or 0, tostring(g.made), tostring(g.lastPick)))
-    end
-    for _, p in ipairs(st.primelets or {}) do
-        U.log(string.format("[splice] primelet %s \"%s\" stage %d growth %d tended %d world %s carried %s potted %s at %.0f, %.0f, %.0f",
-            p.id, Primelet.Name(p), p.stage, p.growth, p.tended, tostring(p.world), tostring(p.carried), tostring(p.potted), p.x or 0, p.y or 0, p.z or 0))
-    end
-    local c = World.Aimed()
-    if c then
-        U.log(string.format("[splice] aimed: %s %s species %s planted %s stage %s tier %s key %s",
-            c.kind, U.full(c.actor or c.obj), tostring(c.species), tostring(c.planted), tostring(c.stage), tostring(c.tier), tostring(c.key)))
-    else
-        U.log("[splice] aimed: nothing")
-    end
-    local me = U.location(U.pawn())
-    if me then
-        for _, h in ipairs(World.Nearby(me, 6000)) do
-            if h.kind == "plot" or h.planted then
-                U.log(string.format("[splice] planted %s %s at %.0f, %.0f (%.0f m)", h.kind, tostring(h.species),
-                    h.loc.X, h.loc.Y, U.dist2d(h.loc, me) / 100))
-            end
-        end
-        for _, w in ipairs(World.WildSpawners(me, 6000)) do
-            U.log(string.format("[splice] wild %s at %.0f, %.0f (%.0f m)", w.species, w.loc.X, w.loc.Y, U.dist2d(w.loc, me) / 100))
-        end
-    end
-    U.log("[splice] held axe power " .. tostring((World.HeldAxe())))
-    World.DumpEquipment()
-    U.log("[splice] " .. Splicing.CatalogueLine())
-end
 
 -- The name for the tag above the game's prompt: a hybrid's own name while
 -- the prompt is on its tree or shoot ("Ash Tree" is all the game knows), or
@@ -1321,18 +1197,6 @@ function Splicing.TagText()
     if World.PromptTarget() then return nil end
     local p = near_primelet()
     return p and Primelet.Name(p) or nil
-end
-
--- Hybrid trees and shoots in this save, for the developer teleport.
-function Splicing.HybridSpots()
-    local out = {}
-    if not ensure_state() then return out end
-    for _, g in ipairs(st.grafts) do
-        if g.state == "hybrid" and g.kind ~= "plot" and g.x then
-            out[#out + 1] = { x = g.x, y = g.y, z = g.z, name = Rules.HybridName(g.scion, g.host), kind = g.kind }
-        end
-    end
-    return out
 end
 
 -- The Action Wheel names its target itself; then our tag only covers what
