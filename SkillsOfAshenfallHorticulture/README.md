@@ -2,7 +2,7 @@
 
 A new skill for RuneScape: Dragonwilds, levels 1 to 25. Graft a cutting onto something you planted and see what's there at dawn. An ash tree full of potatoes, say, or an oak with cabbages in it.
 
-Horticulture is the second Skills of Ashenfall skill. It is hidden until you earn it.
+Horticulture is the second Skills of Ashenfall skill. It stays locked, greyed out with a padlock, until you earn it.
 
 ## Requires
 

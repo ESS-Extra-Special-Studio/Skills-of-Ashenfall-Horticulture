@@ -9,7 +9,7 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 **The skill**
 
 - Horticulture, levels 1 to 25 (3,152 XP).
-- Hidden until you have Historian 25 and Farming 25 and have read the Observances of Brassica Prime.
+- Locked until you have Historian 25 and Farming 25 and have read the Observances of Brassica Prime.
 - The Annotated Hymnal lies on the grass by the wild cabbage patch near the Wise Old Man in Bramblemead Valley. It opens in the game's own lore popup. Below Historian 25 you can't read the older writing under the hymns. Reading it takes you to level 2.
 - End shows your level, XP, satchel and Discovery Catalogue. Shift+End rereads the Observances.
 
@@ -67,12 +67,14 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 ### Changes
 
 - Ordinary farming pays about a third of what it did in the test builds. Splicing is now the main source of XP.
+- Horticulture isn't hidden before you unlock it any more. It shows greyed out with a padlock on character select and in the skills menu.
 
 ### Fixes
 
 - Fixed a crash the first time you picked a farm plot in build mode. Horticulture now pauses its background work while you build and for 3 seconds after, and plots still on the build cursor are left alone.
 - Farm plots are read correctly on the current game build, so plot crops give cuttings, take grafts and pay Farming XP.
 - The hymnal lies along sloping ground instead of sinking a corner into the hillside.
+- The Horticulture badge no longer goes missing on character select.
 
 ### Technical notes
 

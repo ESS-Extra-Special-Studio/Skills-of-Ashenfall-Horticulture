@@ -5,16 +5,16 @@ Draft text for the CurseForge project page. No project exists yet; links are add
 ## Project
 
 - **Name:** Skills of Ashenfall: Horticulture
-- **Summary (one line):** A hidden new skill: graft crops onto trees and see what grows.
+- **Summary (one line):** A new skill you have to earn: graft crops onto trees and see what grows.
 - **Category:** Gameplay
 - **Game version:** Steam build 25632050
 - **Licence:** see LICENSE in the zip
 
 ## Description
 
-Horticulture is the second Skills of Ashenfall skill for RuneScape: Dragonwilds, levels 1 to 25. It stays hidden until you've earned it.
+Horticulture is the second Skills of Ashenfall skill for RuneScape: Dragonwilds, levels 1 to 25. It stays locked until you've earned it.
 
-**Unlocking.** Reach Historian 25 and Farming 25, then find the Annotated Hymnal by the wild cabbage patch near the Wise Old Man in Bramblemead Valley and read it. Below Historian 25 you can't make out the older writing under the hymns. Reading it puts Horticulture in your skills menu at level 2.
+**Unlocking.** Reach Historian 25 and Farming 25, then find the Annotated Hymnal by the wild cabbage patch near the Wise Old Man in Bramblemead Valley and read it. Below Historian 25 you can't make out the older writing under the hymns. Until then Horticulture sits greyed out with a padlock in your skills menu. Reading the hymnal unlocks it at level 2.
 
 **Splicing.** Take a cutting from a plant (G), graft it onto a crop, sapling or tree you planted (G again) and wait for dawn. If it takes, you have a hybrid: potatoes in an ash tree, say, or cabbages growing out of your potatoes. Five flagship hybrids have names of their own, three more are hiding, and every other pairing (150 of them by level 25) grows something too. Hybrid trees can be picked once a day.
 
