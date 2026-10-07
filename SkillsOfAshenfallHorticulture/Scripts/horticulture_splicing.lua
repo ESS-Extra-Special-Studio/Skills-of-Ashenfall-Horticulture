@@ -367,7 +367,9 @@ local function dormant(g)
 end
 
 local function refuse_pick(g, why)
-    if dormant(g) then refuse("DORMANT", why, Rules.PRIME_HOWTO .. ".") else refuse("NOTHING TO PICK", why) end
+    if dormant(g) then refuse("DORMANT", why, Rules.RefreshHowTo(g.scion) .. ".")
+    elseif Rules.IsWoodHybrid(g) then refuse("CHOP IT", why)
+    else refuse("NOTHING TO PICK", why) end
 end
 
 -- The name the game's prompt shows on a hybrid tree; a dormant one says so.
@@ -477,7 +479,9 @@ end
 -- nil when none was found (the produce then drops at the stump).
 local function fell(g, actor, c)
     if c and cfg.promptNames ~= false then Names.Restore(U, c.actor) end
-    local products = Core.Felled(st, g, tree_opts(g))
+    local opts = tree_opts(g)
+    opts.axePower = World.HeldAxe()
+    local products = Core.Felled(st, g, opts)
     plotStage[g.id] = nil
     save()
     U.log("Graft " .. g.id .. " ended: felled")
@@ -725,8 +729,13 @@ local function graft(c)
     save()
     if why == "refresh" then
         xp(Rules.XP.refresh, "Hybrid refreshed")
-        card("SCION REFRESHED", hybrid_name(g),
-            string.format("The prime cutting woke it: %d picks before it rests again.", g.vigour or 0))
+        if Rules.IsWoodHybrid(g) then
+            card("SCION REFRESHED", hybrid_name(g),
+                string.format("The fresh %s cutting woke it: %d bonus chops before it rests again.", Rules.Name(g.scion):lower(), g.vigour or 0))
+        else
+            card("SCION REFRESHED", hybrid_name(g),
+                string.format("The prime cutting woke it: %d picks before it rests again.", g.vigour or 0))
+        end
         U.log(string.format("Graft %s refreshed: vigour %d", g.id, g.vigour or 0))
         hostsCache.at = -100
         refresh_looks()
@@ -780,6 +789,83 @@ local function pick(g)
     card("PICKED", Rules.HybridName(g.scion, g.host),
         (#parts > 0 and table.concat(parts, ", ") or "Nothing could be added to your pack") .. ". " .. after)
     return true
+end
+
+-- Chopping wood hybrids ----------------------------------------------------
+-- A wood hybrid gives its bonus only to a chop. Chops are seen through the
+-- player's live Woodcutting XP: when it rises, the swing landed on whatever
+-- tree is under the crosshair (or, failing a read, the wood hybrid whose
+-- trunk the player stands at).
+local CHOP_NEAR = 300
+local CHOP_WATCH = 2500
+local chopXp, chopNoteAt = nil, -math.huge
+
+local function wood_hybrids_near(me, r)
+    local out = {}
+    for _, g in ipairs(st and st.grafts or {}) do
+        if g.state == "hybrid" and Rules.IsWoodHybrid(g) and U.dist2d({ X = g.x or 0, Y = g.y or 0 }, me) <= r then out[#out + 1] = g end
+    end
+    return out
+end
+
+local function chopped_graft(me, list)
+    local c = World.Aimed()
+    if c and c.kind == "tree" then
+        local g = Core.GraftOn(st, as_point(c))
+        return g and Rules.IsWoodHybrid(g) and g or nil
+    end
+    local best, bestD = nil, CHOP_NEAR
+    for _, g in ipairs(list) do
+        local d = U.dist2d({ X = g.x or 0, Y = g.y or 0 }, me)
+        if d <= bestD then best, bestD = g, d end
+    end
+    return best
+end
+
+local function chop(g)
+    local products, why, reason = Core.Chop(st, g, World.HeldAxe(), tree_opts(g))
+    if not products then
+        -- Every swing after the first lands here; say why only now and then,
+        -- and not on the day the last chop already said it went dormant.
+        local quiet = reason == "chop" or (reason == "dormant" and g.lastPick == st.dawn)
+        if not quiet and now() - chopNoteAt > 60 then
+            chopNoteAt = now()
+            if reason == "dormant" then refuse("DORMANT", why, Rules.RefreshHowTo(g.scion) .. ".")
+            else refuse("NO BONUS WOOD", why) end
+        end
+        return false
+    end
+    save()
+    local parts = give_products(products)
+    xp(Rules.XP.pick, "Hybrid chopped")
+    local after = (g.vigour or 0) > 0 and string.format("%d bonus chop%s left on this scion.", g.vigour, g.vigour == 1 and "" or "s")
+        or "It goes dormant: graft a fresh " .. Rules.Name(g.scion):lower() .. " cutting to wake it."
+    hostsCache.at = -100
+    U.log(string.format("Chopped %s: %s, vigour %s", g.id, table.concat(parts, ", "), tostring(g.vigour)))
+    card("CHOPPED", hybrid_name(g),
+        (#parts > 0 and ("Bonus wood: " .. table.concat(parts, ", ")) or "Nothing could be added to your pack") .. ". " .. after)
+    return true
+end
+
+local function any_wood()
+    for _, g in ipairs(st and st.grafts or {}) do
+        if g.state == "hybrid" and Rules.IsWoodHybrid(g) then return true end
+    end
+    return false
+end
+
+local function watch_chops()
+    if not any_wood() then chopXp = nil return end
+    local me = U.location(U.pawn())
+    local list = me and wood_hybrids_near(me, CHOP_WATCH) or {}
+    if #list == 0 then chopXp = nil return end
+    local now_xp = World.WoodcuttingXp()
+    if not now_xp then return end
+    local last = chopXp
+    chopXp = now_xp
+    if not last or now_xp <= last then return end
+    local g = chopped_graft(me, list)
+    if g then chop(g) end
 end
 
 -- Primelets ---------------------------------------------------------------
@@ -908,7 +994,7 @@ function Splicing.Action()
         local ok, why = graft(c)
         if ok then return end
         -- A hybrid picked today: its harvest is the news, not the graft.
-        if pickWhy and not dormant(g) then refuse("NOTHING TO PICK", pickWhy) return end
+        if pickWhy and not dormant(g) then refuse_pick(g, pickWhy) return end
         U.log("CANNOT GRAFT: " .. tostring(why))
         if not cfg.quiet then
             show_card("CANNOT GRAFT", why, "Alt+" .. cfg.actionKey .. " takes a cutting from it instead.", 4)
@@ -1033,7 +1119,9 @@ function Splicing.InspectGraft()
     local _, why, reason = Core.CanPick(st, g)
     local text = why and (why .. ".") or "Ready to pick."
     if reason == "dormant" then
-        text = text .. " " .. Rules.PRIME_HOWTO .. "."
+        text = text .. " " .. Rules.RefreshHowTo(g.scion) .. "."
+    elseif Rules.IsWoodHybrid(g) then
+        text = string.format("%s %d bonus chop%s left before it rests.", text, g.vigour or 0, g.vigour == 1 and "" or "s")
     elseif Rules.UsesVigour(g) then
         text = string.format("%s %d pick%s left before it rests.", text, g.vigour or 0, g.vigour == 1 and "" or "s")
     elseif g.kind == "plot" then
@@ -1128,6 +1216,7 @@ function Splicing.DevHybrid(scion)
     local h = host_from(c)
     local g = Store.SetPlants({ id = "g" .. st.nextId, kind = h.kind, state = "hybrid", made = st.dawn - 1,
         x = h.x, y = h.y, z = h.z, key = h.key, tier = h.tier, world = h.world }, { c.species, scion })
+    if Rules.UsesVigour(g) then g.vigour = Rules.VigourFor(g) end
     st.nextId = st.nextId + 1
     st.grafts[#st.grafts + 1] = g
     save()
@@ -1288,6 +1377,7 @@ function Splicing.Start(config)
     U.every(2000, "Splicing clock", function() U.game(watch_clock) end)
     U.every(2000, "Hybrid looks", function() U.game(refresh_looks) U.game(refresh_primelets) end)
     U.every(250, "Felled hybrids", function() if next(falling) then U.game(watch_falling) end end)
+    U.every(250, "Wood hybrid chops", function() U.game(watch_chops) end)
     if NotifyOnNewObject then
         local ok, err = pcall(NotifyOnNewObject, "/Script/Dominion.FelledTree", function(actor)
             local later = function() U.game(function() felled_spawned(actor) end) end

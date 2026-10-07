@@ -11,7 +11,8 @@ local Store = {}
 
 Store.VERSION = 3
 
--- Hybrid trees saved before Rootstock wake with this many picks once.
+-- Hybrid trees saved before Rootstock (crop scions) or before the wood rule
+-- (tree scions) wake with this many picks or chops once.
 Store.GRANDFATHER_VIGOUR = 4
 
 function Store.New()
@@ -153,8 +154,7 @@ function Store.Parse(text)
                 if g.plants then Store.SetPlants(g, split(g.plants, ">")) end
             end
             g.fed, g.wet = g.fed == "1", g.wet == "1"
-            local cropOnTree = g.kind ~= "plot" and g.scion and g.scion:find("^FPD_") ~= nil
-            if g.state == "hybrid" and cropOnTree and g.vigour == nil then g.vigour = Store.GRANDFATHER_VIGOUR end
+            if g.state == "hybrid" and g.kind ~= "plot" and g.scion and g.vigour == nil then g.vigour = Store.GRANDFATHER_VIGOUR end
             if g.id and g.plants and #g.plants >= 2 then st.grafts[#st.grafts + 1] = g end
         elseif k == "primelet" then
             local p = read_row(v, PRIMELET_FIELDS, PRIMELET_NUMERIC)

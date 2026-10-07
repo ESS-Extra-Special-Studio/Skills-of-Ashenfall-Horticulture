@@ -33,6 +33,8 @@ local FIELDS = {
       help = "true lets crop cuttings come from wild plants as well as your farm plots." },
     { key = "vigour_picks", default = "4", kind = "number", min = 1, max = 100,
       help = "Picks a crop grafted onto a tree gives before it goes dormant. A new prime cutting of the same crop wakes it." },
+    { key = "wood_chops", default = "4", kind = "number", min = 1, max = 100,
+      help = "Bonus chops a tree grafted onto a tree gives before it goes dormant. The bonus wood comes on the first chop each day with an axe that could fell every wood in it. A fresh cutting of the grafted tree wakes it." },
     { key = "prime_cooldown_dawns", default = "2", kind = "number", min = 0, max = 30,
       help = "Dawns before the same farm plot gives another prime cutting (one per crop cycle)." },
     { key = "pick_per_farming_levels", default = "10", kind = "number", min = 1, max = 99,

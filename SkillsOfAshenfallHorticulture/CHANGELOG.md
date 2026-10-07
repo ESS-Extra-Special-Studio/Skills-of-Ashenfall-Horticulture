@@ -38,8 +38,9 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 - A crop on a tree gives about one plot harvest of that crop per pick, plus one for every 10 Farming levels. It never gives more than half a watered, composted plot's harvest.
 - Tree picks also pay a little Farming XP: a quarter of what the same plot harvest pays, at most 8.
 - After four picks the tree goes dormant ("Tuberwood Ash (dormant)"). Graft another prime cutting of the same crop to wake it for four more.
+- A tree on a tree, such as Weeping Oak, gives no wood by itself. Your first chop each day with an axe that could fell every wood in it (iron for Weeping Oak) drops bonus wood. After four bonus chops it goes dormant until you graft a fresh cutting of the same wood, from a living tree. G, the prompt and the wheel say which axe it needs and how many chops are left.
 - A crop on a crop adds the cutting's crop to the plot's normal harvest. The game's compost and water bonuses apply when the plot is of that crop's tier, and a prime cutting adds one more. A prime Brassitato in a watered, composted plot gives 6 cabbages on top of the potatoes.
-- Felling a hybrid tree ends it. It keeps its look as it falls, and if it had a pick left that day, one pick's worth of produce drops where the canopy lands. Felling pays no XP.
+- Felling a hybrid tree ends it. It keeps its look as it falls, and if it had a pick left that day, one pick's worth of produce drops where the canopy lands. A tree on a tree also needs the axe its bonus chops need. Felling pays no XP.
 
 **The Brassica Primelet**
 
@@ -51,7 +52,7 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 
 **XP**
 
-- Splicing: cutting 8, graft 20, graft takes 45 (rejected 10), new hybrid +50, new flagship +200, tree pick or hybrid harvest 25, waking a dormant tree 15.
+- Splicing: cutting 8, graft 20, graft takes 45 (rejected 10), new hybrid +50, new flagship +200, tree pick, bonus chop or hybrid harvest 25, waking a dormant tree 15.
 - Brassica Primelet: +200 when found, 30 for each stage, 5 a day for tending until it's grown.
 - Ordinary farming still pays a little: sowing 10, watering 5, composting 10, weeding 3, curing 13, harvesting 23. The first sowing and first harvest of each crop pay +17 and +33, and the first harvest of each of the game's 24 crops goes in the catalogue's Vanilla Plants section.
 
@@ -61,7 +62,7 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 
 **Settings**
 
-- `config.txt` is written on first run: `status_key`, `action_key`, `primelet_chance`, `quiet`, `name_tag`, `mutation_tint`, `primelet_chattiness`, `sway`, `sway_degrees` and `debug`, plus the harvest numbers `wild_cuttings`, `vigour_picks`, `prime_cooldown_dawns`, `pick_per_farming_levels`, `pick_farming_xp`, `pick_farming_xp_share`, `pick_farming_xp_cap`, `compost_multiplier`, `water_multiplier`, `prime_share` and `farming_scale_cap`.
+- `config.txt` is written on first run: `status_key`, `action_key`, `primelet_chance`, `quiet`, `name_tag`, `mutation_tint`, `primelet_chattiness`, `sway`, `sway_degrees` and `debug`, plus the harvest numbers `wild_cuttings`, `vigour_picks`, `wood_chops`, `prime_cooldown_dawns`, `pick_per_farming_levels`, `pick_farming_xp`, `pick_farming_xp_share`, `pick_farming_xp_cap`, `compost_multiplier`, `water_multiplier`, `prime_share` and `farming_scale_cap`.
 
 ### Changes
 
@@ -77,5 +78,6 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 
 - Skill id `Horticulture`. Progress is in `<character id>.Horticulture.txt` and the satchel and grafts in `<character id>.Horticulture.splicing.txt`, both in `%LOCALAPPDATA%\RSDragonwilds\Saved\ESLDragonWilds`.
 - The splicing save (version 2) stores a hybrid as an ordered list of plants, ready for a third graft later. Version 1 files convert on load.
+- A bonus chop is seen as a rise in the player's live Woodcutting XP (`SkillComponent`) while aiming at a wood hybrid or standing at its trunk. The swing itself is the game's; nothing is added to it.
 - Hybrid looks come from `Scripts\placements\` (the newest version of each file is used), with per-hybrid overrides in `looks\<HybridId>.txt`.
 - The mod's pak, `SoAHorticulture_P` (`.pak`, `.ucas`, `.utoc`, about 28 MB together), adds the fruit stalks, the Primelets' faces and the baked fruit layers listed in `Scripts\placements\hort_fruit_layers_vNNN.lua`. Without it, fruit sits against the bark and the Primelets have no faces.

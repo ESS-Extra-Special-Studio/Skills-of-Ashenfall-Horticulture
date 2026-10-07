@@ -84,10 +84,16 @@ function Core.TakeCutting(st, src)
     return c
 end
 
--- A dormant hybrid tree that this cutting can wake: the same crop, prime.
+-- A dormant hybrid tree that this cutting can wake: the same crop (prime),
+-- or for a wood hybrid a fresh cutting of the same wood. Tree cuttings only
+-- come from living trees and wilt in WILT_DAWNS, so any in the satchel is fresh.
 local function refreshable(existing, c)
     return existing.state == "hybrid" and Rules.UsesVigour(existing) and (existing.vigour or 0) <= 0
         and c and not c.primelet and c.species == existing.scion
+end
+
+local function wakes(existing, c)
+    return Rules.IsWoodHybrid(existing) or (c.quality or 1) >= 2
 end
 
 -- host: { species, kind, key, planted, stage, tier, x, y, z, bonus, world }.
@@ -99,7 +105,7 @@ function Core.CanGraft(st, host, level, c)
     if existing then
         if existing.state == "pending" then return false, "Already grafted. Come back after dawn" end
         if refreshable(existing, c) then
-            if (c.quality or 1) >= 2 then return true, "refresh" end
+            if wakes(existing, c) then return true, "refresh" end
             return false, Rules.DormantText(existing.scion) .. ". " .. Rules.PRIME_HOWTO
         end
         local why = "This is already a " .. Rules.PlantsName(existing.plants)
@@ -128,9 +134,9 @@ function Core.Graft(st, host, level)
     if not ok then return nil, why end
     if why == "refresh" then
         local g = Core.GraftOn(st, host)
-        use_selected(st)
-        g.vigour = Rules.ROOTSTOCK.vigourPicks
-        g.quality = 2
+        local c = use_selected(st)
+        g.vigour = Rules.VigourFor(g)
+        g.quality = c.quality or 1
         return g, "refresh"
     end
     local c = use_selected(st)
@@ -184,7 +190,7 @@ function Core.Dawn(st, level, rng, alive, opts)
                         outcomes[#outcomes + 1] = { graft = g, result = "primelet", chance = chance, primelet = p }
                     else
                         g.state = "hybrid"
-                        if Rules.UsesVigour(g) then g.vigour = Rules.ROOTSTOCK.vigourPicks end
+                        if Rules.UsesVigour(g) then g.vigour = Rules.VigourFor(g) end
                         keep[#keep + 1] = g
                         outcomes[#outcomes + 1] = { graft = g, result = "takes", chance = chance }
                     end
@@ -209,14 +215,26 @@ function Core.Dawn(st, level, rng, alive, opts)
     return outcomes, wilted, Primelet.Dawn(st)
 end
 
--- Tree and sapling hybrids give once per in-game day; a crop scion on a tree
--- also uses a pick of vigour, and goes dormant at none.
-function Core.CanPick(st, g)
+-- Tree and sapling hybrids give once per in-game day and use one vigour, going
+-- dormant at none. A crop scion is picked; a wood hybrid only gives to a
+-- chop (how = "chop"), never to a pick. The third return names the reason:
+-- "dormant", "chop" (a wood hybrid wants a swing) or nil.
+function Core.CanPick(st, g, how)
     if not g or g.state ~= "hybrid" then return false, "Nothing to pick yet" end
     if g.kind == "plot" then return false, "Harvest the crop as usual; the graft adds to it" end
     if Rules.UsesVigour(g) and (g.vigour or 0) <= 0 then return false, Rules.DormantText(g.scion), "dormant" end
-    if g.lastPick == st.dawn then return false, "Already picked today. More after dawn" end
+    local wood = Rules.IsWoodHybrid(g)
+    if g.lastPick == st.dawn then
+        return false, wood and "Already chopped for bonus wood today. More after dawn" or "Already picked today. More after dawn"
+    end
+    if wood and how ~= "chop" then return false, Rules.ChopHowTo(g), "chop" end
     return true
+end
+
+local function give(g, opts)
+    local o = { tree = true }
+    for k, v in pairs(opts or {}) do o[k] = v end
+    return Rules.Products(g.scion, g.host, o)
 end
 
 -- opts: Rules.Products tree options (farming, live).
@@ -225,9 +243,24 @@ function Core.Pick(st, g, opts)
     if not ok then return nil, why end
     g.lastPick = st.dawn
     if Rules.UsesVigour(g) then g.vigour = (g.vigour or 0) - 1 end
-    local o = { tree = true }
-    for k, v in pairs(opts or {}) do o[k] = v end
-    return Rules.Products(g.scion, g.host, o)
+    return give(g, opts)
+end
+
+-- A swing at a wood hybrid with an axe of axePower. The first chop each day
+-- with an axe that could fell every wood in it gives the bonus wood.
+-- Returns the products, or nil, the reason and its kind ("weak", "dormant",
+-- "chop" when it was already chopped today).
+function Core.Chop(st, g, axePower, opts)
+    if not Rules.IsWoodHybrid(g) then return nil, "Only wood hybrids give to a chop" end
+    local ok, why, reason = Core.CanPick(st, g, "chop")
+    if not ok then return nil, why, reason or "chop" end
+    local need = Rules.WoodAxePower(g)
+    if (axePower or 0) < need then
+        return nil, "The bonus wood needs " .. Rules.AnAxe(need) .. " or better", "weak"
+    end
+    g.lastPick = st.dawn
+    g.vigour = (g.vigour or 0) - 1
+    return give(g, opts)
 end
 
 -- A crop host was harvested: its graft ends. Products only for a hybrid.
@@ -243,14 +276,14 @@ end
 
 -- A hybrid tree was felled: its graft ends. At most one pick's worth falls
 -- with the logs, and only when a pick was left (not picked today, vigour
--- remaining).
+-- remaining). A wood hybrid's share also needs the axe its chops need
+-- (opts.axePower).
 function Core.Felled(st, g, opts)
     Core.Remove(st, g)
     if g.state ~= "hybrid" or g.lastPick == st.dawn then return {} end
     if Rules.UsesVigour(g) and (g.vigour or 0) <= 0 then return {} end
-    local o = { tree = true }
-    for k, v in pairs(opts or {}) do o[k] = v end
-    return Rules.Products(g.scion, g.host, o)
+    if Rules.IsWoodHybrid(g) and ((opts and opts.axePower) or 0) < Rules.WoodAxePower(g) then return {} end
+    return give(g, opts)
 end
 
 return Core

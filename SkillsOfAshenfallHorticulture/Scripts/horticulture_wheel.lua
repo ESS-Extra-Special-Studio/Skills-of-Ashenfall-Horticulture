@@ -60,8 +60,10 @@ function Wheel.View(ctx)
     if g then v.inspect = { enabled = true } end
     if g and g.state == "hybrid" and g.kind ~= "plot" and not carrying then
         local ok, why = Core.CanPick(st, g)
-        local label = "Pick " .. Rules.HybridName(g.scion, g.host)
-        if Rules.UsesVigour(g) and (g.vigour or 0) > 0 then label = string.format("%s (%d left)", label, g.vigour) end
+        -- A wood hybrid gives to a swing of the axe, so its slice only explains.
+        local label = (Rules.IsWoodHybrid(g) and "Chop " or "Pick ") .. Rules.HybridName(g.scion, g.host)
+        if Rules.UsesVigour(g) and (g.vigour or 0) > 0 then label = string.format("%s (%d left)", label, g.vigour)
+        elseif Rules.UsesVigour(g) then label = label .. " (dormant)" end
         v.pick = slice(ok, why, label)
     end
 

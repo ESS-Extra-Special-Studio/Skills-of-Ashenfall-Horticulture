@@ -52,8 +52,9 @@ Horticulture then appears in your skills menu and on the character select screen
 4. **The hybrid.** A graft that takes changes the plant you can see, and the first of each pairing enters your **Discovery Catalogue**.
 5. **Harvest it.** Hybrid trees can be picked once a day (aim and press G, or E at a grown tree). The fruit hangs at its natural size and sways with the branches.
    - **A crop on a tree** gives about one plot harvest of that crop a pick, never more than half a watered, composted plot's, and a little Farming XP (a quarter of what the plot harvest pays, at most 8). After four picks the scion rests: the tree goes **dormant** ("Tuberwood Ash (dormant)") until you graft another prime cutting of the same crop onto it, which wakes it at once for four more.
+   - **A tree on a tree** (Weeping Oak) gives no wood on its own, so it doesn't replace Woodcutting. Chop it with an axe that could fell every wood in it (iron for Weeping Oak) and your first chop each day drops bonus wood on top of the normal logs. After four bonus chops it goes **dormant** until you graft a fresh cutting of the same wood onto it, cut from a living tree, which wakes it at once.
    - **A crop on a crop** adds the cutting's crop to the plot's normal harvest, and the game's own compost and water bonuses apply to that extra when the plot is of the crop's tier: about 14 to 16 for a tended plot with a hybrid against 10 without. Farming XP is the game's, as for any harvest.
-   - **Felling** a hybrid tree ends it, with one pick's worth among the logs if it had a pick left that day (no XP for it).
+   - **Felling** a hybrid tree ends it, with one pick's worth among the logs if it had a pick left that day (no XP for it). For a tree on a tree that also needs the axe its bonus chops need.
 
 Tree cuttings need a logging axe in your hand that could fell that tree, as the game asks when you chop it: stone for ash, bronze for oak, iron for willow.
 
@@ -79,7 +80,7 @@ Splicing also asks for a vanilla level, set by the tier the game uses for that p
 | Brassitato | Cabbage onto potato | 5 | 2 cabbages with the potato harvest; 4 in a watered, composted plot, 6 from a prime cutting |
 | Brassica-Oak | Cabbage onto oak | 8 | 5 cabbages a pick, from the canopy (four picks a prime cutting) |
 | Sheaf Ash | Wheat onto ash | 10 | 5 wheat a pick (four picks a prime cutting) |
-| Weeping Oak | Willow onto oak | 20 | willow and oak wood every day |
+| Weeping Oak | Willow onto oak | 20 | 2 willow and 1 oak wood on your first chop each day with an iron axe (four chops a fresh willow cutting) |
 
 Three more are waiting to be found, and every other pairing (all 150 that open by Horticulture 25) makes a hybrid of its own with a look and a catalogue line: crops nestle among the host crop's leaves, hang from a tree's branches, and a tree cutting grows as a limb of its host. Everything grows at its natural size.
 
@@ -103,8 +104,8 @@ Very rarely (1.5% of the time, `primelet_chance`), a cabbage grafted onto a cabb
 | A new hybrid (first time each pairing) | +50 |
 | A new flagship hybrid | +200 |
 | The Brassica Primelet: found / each stage / tended (once a day, until grown) | +200 once / 30 / 5 |
-| Pick from a hybrid tree (once a day) or harvest a hybrid crop | 25 |
-| Wake a dormant hybrid tree with a prime cutting | 15 |
+| Pick from a hybrid tree or chop a wood hybrid for its bonus (once a day), or harvest a hybrid crop | 25 |
+| Wake a dormant hybrid tree with a prime cutting (or a fresh wood cutting) | 15 |
 | Reading the Observances | 33, once |
 
 Ordinary farming still pays a little: sowing 10, watering 5, composting 10, weeding 3, curing 13, harvesting 23, and +17 / +33 for the first sowing and first harvest of each kind of crop. With eight plots and a few planted trees, level 25 takes four to six in-game days.
@@ -139,6 +140,7 @@ The first run writes `config.txt` next to `enabled.txt`:
 | `sway_degrees` | `0.35` | How far that fruit leans at the game's normal wind, in degrees about the trunk base (0 to 3). |
 | `wild_cuttings` | `false` | `true` lets crop cuttings come from wild plants too. |
 | `vigour_picks` | `4` | Picks a crop on a tree gives before it goes dormant. |
+| `wood_chops` | `4` | Bonus chops a tree on a tree gives before it goes dormant. |
 | `prime_cooldown_dawns` | `2` | Dawns before the same plot gives another prime cutting. |
 | `pick_per_farming_levels` | `10` | A tree pick adds one per this many Farming levels, still capped at half a tended plot's harvest. |
 | `pick_farming_xp` | `true` | Tree picks pay a little vanilla Farming XP. |

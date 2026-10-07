@@ -52,6 +52,7 @@ Rules.ROOTSTOCK = {
     waterBonus = 5,
     compostBonus = 5,
     farmingBonusCap = 10,    -- +1 per 5 Farming levels above 25
+    woodChops = 4,           -- bonus chops a fresh scion gives a tree-on-tree hybrid
 }
 
 -- Vanilla per-harvest BaseYield (FPD_* assets, build 25632050): 5, or 3
@@ -67,6 +68,7 @@ local CONFIG_KEYS = {
     compost_multiplier = "compostMult", water_multiplier = "waterMult", farming_scale_cap = "farmingScaleCap",
     prime_share = "primeShare", pick_per_farming_levels = "pickPerFarming",
     pick_farming_xp_share = "pickFarmingXpShare", pick_farming_xp_cap = "pickFarmingXpCap",
+    wood_chops = "woodChops",
 }
 
 -- Copies the Rootstock numbers from the player's config.
@@ -235,7 +237,7 @@ Rules.FLAGSHIPS = {
     ["Willow>Oak"] = {
         id = "WeepingOak", name = "Weeping Oak", required = true, order = 5, level = 20,
         products = { { species = "Willow", count = 2 }, { species = "Oak", count = 1 } },
-        detail = "Willow grafted onto oak. Pick willow and oak wood once a day.",
+        detail = "Willow grafted onto oak. Chop it with an iron axe or better for extra willow and oak wood, once a day.",
         lore = "Oak for strength, willow for grief. The result stands very firmly and is sad about it.",
     },
     ["FPD_Redberry>Oak"] = {
@@ -247,7 +249,7 @@ Rules.FLAGSHIPS = {
     ["Oak>Ash"] = {
         id = "TwoBarkAsh", name = "Two-Bark Ash", order = 7,
         products = { { species = "Oak", count = 2 } },
-        detail = "Oak grafted onto ash. Pick oak wood once a day.",
+        detail = "Oak grafted onto ash. Chop it with a bronze axe or better for extra oak wood, once a day.",
         lore = "Two druids argued over which tree to plant. This is the compromise, and neither of them likes it.",
     },
     ["FPD_Onion>FPD_Cabbage"] = {
@@ -353,9 +355,45 @@ function Rules.FarmingScale(farming)
     return math.min(R.farmingScaleCap, 1 + math.max(0, (farming or 0) - 25) / 100)
 end
 
--- A tree hybrid with a crop scion runs on vigour; tree-on-tree hybrids do not.
+-- Every tree hybrid runs on vigour. A crop scion spends it on picks; a tree
+-- scion (Weeping Oak, Two-Bark Ash) spends it on bonus chops, so a wood
+-- hybrid never gives logs without a swing of the right axe.
 function Rules.UsesVigour(g)
-    return g and g.kind ~= "plot" and Rules.IsCrop(g.scion)
+    return g ~= nil and g.kind ~= "plot" and (Rules.IsCrop(g.scion) or Rules.IsTree(g.scion))
+end
+
+function Rules.IsWoodHybrid(g)
+    return g ~= nil and g.kind ~= "plot" and Rules.IsTree(g.scion)
+end
+
+-- Vigour a fresh scion gives: picks for a crop scion, chops for a tree one.
+function Rules.VigourFor(g)
+    if Rules.IsWoodHybrid(g) then return Rules.ROOTSTOCK.woodChops end
+    return Rules.ROOTSTOCK.vigourPicks
+end
+
+-- The axe a wood hybrid's bonus needs: one that could fell every wood in it.
+function Rules.WoodAxePower(g)
+    local need = 1
+    for _, p in ipairs((g and g.plants) or { g and g.host, g and g.scion }) do
+        local t = Rules.TREES[p]
+        if t and t.power > need then need = t.power end
+    end
+    return need
+end
+
+local AXE_NAMES = { [1] = "stone", [3] = "bronze", [4] = "iron", [5] = "steel", [6] = "mithril", [7] = "adamant", [8] = "rune" }
+function Rules.AxeName(power)
+    return AXE_NAMES[power] or ("power " .. tostring(power))
+end
+
+function Rules.AnAxe(power)
+    local name = Rules.AxeName(power)
+    return (name:find("^[aeiou]") and "an " or "a ") .. name .. " axe"
+end
+
+function Rules.ChopHowTo(g)
+    return "Chop it with " .. Rules.AnAxe(Rules.WoodAxePower(g)) .. " or better for bonus wood, once a day"
 end
 
 -- What a hybrid gives. opts:
@@ -417,7 +455,17 @@ end
 Rules.PRIME_HOWTO = "Prime cuttings come from a watered, composted crop in a plot of its own tier or better"
 
 function Rules.DormantText(scion)
+    if Rules.IsTree(scion) then return "Dormant: needs a fresh " .. Rules.Name(scion):lower() .. " cutting" end
     return "Dormant: needs a prime " .. Rules.Name(scion):lower() .. " cutting"
+end
+
+-- Where the cutting that wakes a dormant hybrid comes from.
+function Rules.RefreshHowTo(scion)
+    if Rules.IsTree(scion) then
+        local name = Rules.Name(scion):lower()
+        return "Cut one from a living " .. name .. " tree with " .. Rules.AnAxe(Rules.TREES[scion].power) .. " or better"
+    end
+    return Rules.PRIME_HOWTO
 end
 
 -- Can this source give a cutting? src = { species, kind = "crop"|"tree",

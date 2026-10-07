@@ -625,16 +625,26 @@ end
 -- through, nil when it could not be made.
 local FARMING_ID = "PyUi-0LU_riFY46AnnFiWg"
 local XP_TABLE = "/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Farming.DT_XPEvents_Farming"
-local function farming_xp(sc)
+local WOODCUTTING_ID = "4zYUGF5u_0KbMLkWJmmBbQ"
+local function skill_xp(sc, id)
     local xp = nil
     pcall(function()
         local arr = sc.Skills
         for i = 1, arr:GetArrayNum() do
             local e = arr[i]
-            if e.SkillData.PersistenceID:ToString() == FARMING_ID then xp = e.CurrentXp break end
+            if e.SkillData.PersistenceID:ToString() == id then xp = e.CurrentXp break end
         end
     end)
     return tonumber(xp)
+end
+local function farming_xp(sc) return skill_xp(sc, FARMING_ID) end
+
+-- The player's live Woodcutting XP, or nil. Every axe hit on a tree pays
+-- Woodcutting XP (FellableTree's chop XP events), so a rise is a chop.
+function World.WoodcuttingXp()
+    local sc = prop(U.pc(), "SkillComponent")
+    if not U.valid(sc) then return nil end
+    return skill_xp(sc, WOODCUTTING_ID)
 end
 
 function World.AddFarmingXp(amount, context)

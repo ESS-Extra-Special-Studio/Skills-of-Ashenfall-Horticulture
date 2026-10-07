@@ -697,6 +697,8 @@ package.loaded["horticulture_nametag"] = { Show = function(t) tagShown[#tagShown
 W.Give = function(item, n) given[#given + 1] = item:match("([^/]+)$") .. "x" .. n return true end
 W.AddFarmingXp = function(n) xp[#xp + 1] = "Farming=" .. n return n end
 W.CropValues = function() return nil end
+wcxp = 0
+W.WoodcuttingXp = function() return wcxp end
 local Looks = require("horticulture_looks")
 Looks.Init = function() end
 Looks.Apply = function(g, h, mode, id) applied[#applied + 1] = g.id .. ":" .. mode .. ":" .. id return 3 end
@@ -1940,7 +1942,7 @@ vg = L.eval(r"""function()
         tier = 1, fed = true, wet = true, quality = 2 }
     local hp = Core.Harvested({ grafts = { h } }, h)
     say("harvest", hp[1].count)
-    -- tree on tree never runs on vigour
+    -- tree on tree runs on vigour too, spent on chops
     say("treeontree", tostring(R.UsesVigour({ kind = "tree", scion = "Oak", host = "Ash" })))
     return table.concat(out, "\n")
 end""")().split("\n")
@@ -1957,7 +1959,7 @@ check("refreshed scion picks again", vg[13] == "woken 5 3", vg[13])
 check("felled the day it was picked: no produce", vg[14] == "fell-picked 0", vg[14])
 check("felled with a pick left: one pick's worth with the logs", vg[15] == "fell 1 5", vg[15])
 check("crop-on-crop harvest uses the graft's tending and prime", vg[16] == "harvest 6", vg[16])
-check("tree-on-tree hybrids have no vigour", vg[17] == "treeontree false", vg[17])
+check("tree-on-tree hybrids run on vigour too", vg[17] == "treeontree true", vg[17])
 
 st3 = L.eval(r"""function(path)
     local Store = require("horticulture_splice_store")
@@ -1978,8 +1980,82 @@ st3 = L.eval(r"""function(path)
         tostring(g1.vigour), tostring(g1.quality), tostring(b.primeSources["plot:1"]), tostring(g2.fed), tostring(g2.wet),
         tostring(g3.vigour), tostring(g4.vigour))
 end""")(os.path.join(TMP, "v3.txt"))
-check("store v3: cutting quality, vigour, prime sources and tending round-trip; old crop-on-tree hybrids get 4 picks",
-      st3 == "2 1|2 2 6|true false|4|nil", st3)
+check("store v3: cutting quality, vigour, prime sources and tending round-trip; old tree hybrids (crop or wood scion) get 4",
+      st3 == "2 1|2 2 6|true false|4|4", st3)
+
+# Tree on tree: bonus wood only from a chop with the right axe, then dormant.
+L = fresh()
+wd = L.eval(r"""function()
+    local Core = require("horticulture_splice_core")
+    local R = require("horticulture_splice_rules")
+    local Store = require("horticulture_splice_store")
+    local st = Store.New()
+    local out = {}
+    local function say(...) local t = {} for i, v in ipairs({ ... }) do t[i] = tostring(v) end out[#out + 1] = table.concat(t, " ") end
+    local weeping = Store.SetPlants({ kind = "tree" }, { "Oak", "Willow" })
+    local twobark = Store.SetPlants({ kind = "tree" }, { "Ash", "Oak" })
+    say("axe", R.WoodAxePower(weeping), R.WoodAxePower(twobark), R.VigourFor(weeping), R.VigourFor({ kind = "tree", scion = "FPD_Potato" }))
+    say("howto", R.ChopHowTo(weeping))
+    say("howto2", R.ChopHowTo(twobark))
+    say("dormant", R.DormantText("Willow"))
+    say("refresh", R.RefreshHowTo("Willow"))
+    -- graft willow onto a planted oak; it takes at dawn
+    st.cuttings = { { species = "Willow", taken = 0, quality = 1 } }
+    st.selected = 1
+    st.firstTaken = false
+    local oak = { species = "Oak", kind = "tree", planted = true, x = 0, y = 0, z = 0 }
+    local g = Core.Graft(st, oak, 20)
+    Core.Dawn(st, 20, function() return 1 end)
+    say("takes", g.state, g.vigour)
+    local ok, why, reason = Core.CanPick(st, g)
+    say("pick", ok, reason, why)
+    say("pickcall", Core.Pick(st, g) == nil)
+    local p, w, r = Core.Chop(st, g, 3)
+    say("weak", p == nil, r, w, g.vigour)
+    for i = 1, 4 do
+        p = Core.Chop(st, g, 4)
+        say("chop" .. i, p[1].species, p[1].count, p[2].species, p[2].count, g.vigour)
+        p, w, r = Core.Chop(st, g, 8)
+        say("again" .. i, p == nil, r)
+        Core.Dawn(st, 20, function() return 1 end)
+    end
+    p, w, r = Core.Chop(st, g, 8)
+    say("dormant-chop", p == nil, r, w)
+    say("fell-dormant", #Core.Felled({ grafts = { g }, dawn = st.dawn }, g, { axePower = 8 }))
+    st.grafts = { g }
+    st.cuttings = { { species = "Oak", taken = st.dawn, quality = 1 } }
+    st.selected = 1
+    local _, ow = Core.CanGraft(st, oak, 20)
+    say("other", ow)
+    st.cuttings = { { species = "Willow", taken = st.dawn, quality = 1 } }
+    local g2, how = Core.Graft(st, oak, 20)
+    say("woken", g2 == g, how, g.vigour, #st.cuttings, g.state)
+    say("fell-weak", #Core.Felled({ grafts = { g }, dawn = st.dawn }, g, { axePower = 3 }))
+    local f = Core.Felled({ grafts = { g }, dawn = st.dawn }, g, { axePower = 4 })
+    say("fell", #f, f[1] and f[1].count or "-")
+    R.Configure({ wood_chops = 2 })
+    say("cfg", R.VigourFor(weeping))
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("wood: Weeping Oak needs an iron axe (power 4), Two-Bark Ash bronze (3); 4 chops against 4 picks", wd[0] == "axe 4 3 4 4", wd[0])
+check("wood: the how-to names the axe", wd[1] == "howto Chop it with an iron axe or better for bonus wood, once a day"
+      and wd[2] == "howto2 Chop it with a bronze axe or better for bonus wood, once a day", wd[1:3])
+check("wood: dormant text asks for a fresh cutting of the grafted wood", wd[3] == "dormant Dormant: needs a fresh willow cutting", wd[3])
+check("wood: the refresh how-to says where it comes from", wd[4] == "refresh Cut one from a living willow tree with an iron axe or better", wd[4])
+check("wood: a Weeping Oak that takes starts with 4 chops", wd[5] == "takes hybrid 4", wd[5])
+check("wood: no daily pick: G says to chop it", wd[6].startswith("pick false chop Chop it with an iron axe") and wd[7] == "pickcall true", wd[6:8])
+check("wood: a bronze axe gets no bonus from Weeping Oak and spends nothing", wd[8] == "weak true weak The bonus wood needs an iron axe or better 4", wd[8])
+check("wood: the first chop each day gives 2 willow and 1 oak and uses one chop",
+      [wd[9], wd[11], wd[13], wd[15]] == ["chop1 Willow 2 Oak 1 3", "chop2 Willow 2 Oak 1 2", "chop3 Willow 2 Oak 1 1", "chop4 Willow 2 Oak 1 0"],
+      [wd[9], wd[11], wd[13], wd[15]])
+check("wood: later chops that day give nothing", all(wd[i].endswith("true chop") for i in (10, 12, 14)), [wd[10], wd[12], wd[14]])
+check("wood: after the last chop it is dormant", wd[16] == "again4 true dormant" and wd[17] == "dormant-chop true dormant Dormant: needs a fresh willow cutting", wd[16:18])
+check("wood: felling a dormant wood hybrid drops no bonus", wd[18] == "fell-dormant 0", wd[18])
+check("wood: a cutting of another wood does not wake it", wd[19].startswith("other This is already"), wd[19])
+check("wood: a fresh willow cutting wakes it at once (no dawn roll)", wd[20] == "woken true refresh 4 0 hybrid", wd[20])
+check("wood: felled with an axe too weak for the bonus: logs only", wd[21] == "fell-weak 0", wd[21])
+check("wood: felled with the right axe and a chop left: one chop's bonus", wd[22] == "fell 2 2", wd[22])
+check("wood: wood_chops in config.txt sets the chops", wd[23] == "cfg 2", wd[23])
 
 bk = L.eval(r"""function()
     local P = require("horticulture_placement")
@@ -2088,6 +2164,76 @@ potato.species = None
 g.tick()
 gv = g.take("given")
 check("glue: a prime Brassitato in a watered, composted plot adds 6 cabbages (vanilla potatoes come on top)", "ITEM_Resources_Cabbagex6" in gv, gv)
+
+# Weeping Oak through the game glue: chops seen through Woodcutting XP.
+drop(save)
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+L.execute(WHEEL, TMP)
+g = L.globals()
+g.level = 20
+willow = g.tree("Willow", False, 900)
+oak = g.tree("Oak", True, 200)
+g.nearby = L.table_from([willow, oak])
+g.axe = 4
+g.aimed = willow
+g.press("G")
+g.aimed = oak
+g.press("G")
+g.S.Dawn("test")
+for _ in range(4):
+    g.tick()
+g.take("cards"); g.take("xp"); g.take("awards"); g.take("given")
+g.press("G")
+c = g.take("cards")
+check("glue wood: G on a Weeping Oak gives nothing and says to chop it with an iron axe",
+      "CHOP IT|Chop it with an iron axe or better" in c and g.take("given") == "", c)
+v = g.view("pick")
+check("wheel wood: the slice reads Chop, greyed with the axe it needs and the chops left",
+      v == "off Chop Weeping Oak (4 left) | Chop it with an iron axe or better for bonus wood, once a day", v)
+g.tick()
+g.axe = 3
+g.wcxp = 10
+g.tick()
+c = g.take("cards")
+check("glue wood: a chop with a bronze axe gives no bonus and says why", g.take("given") == "" and "NO BONUS WOOD|The bonus wood needs an iron axe" in c, c)
+g.axe = 4
+for i in range(4):
+    g.wcxp = g.wcxp + 10
+    g.tick()
+    g.wcxp = g.wcxp + 10
+    g.tick()
+    g.S.Dawn("test")
+    for _ in range(3):
+        g.tick()
+gv = g.take("given")
+c = g.take("cards")
+x = g.take("xp")
+check("glue wood: four days of chopping give the bonus four times (one a day), 2 willow and 1 oak each",
+      gv.count("ITEM_Resources_Wood_Willowx2") == 4 and gv.count("ITEM_Resources_Wood_Oakx1") == 4 and x.count("Hybrid chopped=25") == 4, (gv, x))
+check("glue wood: the last chop says it goes dormant, once", "It goes dormant: graft a fresh willow cutting" in c and "DORMANT|" not in c, c)
+g.promptHost = oak
+check("glue wood: the name tag and prompt say dormant", g.S.TagText() == "Weeping Oak (dormant)", g.S.TagText())
+g.promptHost = None
+v = g.view("pick")
+check("wheel wood: a dormant Weeping Oak's slice says so", v == "off Chop Weeping Oak (dormant) | Dormant: needs a fresh willow cutting", v)
+g.wcxp = g.wcxp + 10
+g.tick()
+g.take("cards")
+check("glue wood: chopping a dormant one gives nothing", g.take("given") == "")
+g.aimed = willow
+g.press("G")
+g.take("cards"); g.take("xp")
+g.aimed = oak
+g.press("G")
+c = g.take("cards")
+x = g.take("xp")
+check("glue wood: a fresh willow cutting wakes it at once", "SCION REFRESHED|Weeping Oak|The fresh willow cutting woke it: 4 bonus chops" in c and "Hybrid refreshed=15" in x, (c, x))
+g.wcxp = g.wcxp + 10
+g.aimed = None
+g.tick()
+check("glue wood: a chop counts while standing at its trunk even when the crosshair reads nothing",
+      "ITEM_Resources_Wood_Willowx2" in g.take("given"), "")
 
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):
