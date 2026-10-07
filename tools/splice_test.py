@@ -1419,6 +1419,57 @@ fb = L.eval(r"""function()
 end""")()
 check("no-pak fallback: the bark-contact position replaces the stalk-tip one", fb == "100,500 60,480", fb)
 
+# Crop-on-crop pieces on each plant of a plot (PlantMesh is an instanced mesh, one instance per plant).
+onp = L.eval(r"""function()
+    local P = require("horticulture_placements")
+    local piece = { path = "/Game/Art/Item/Resources/Cabbage/SM_Cabbage_01v3.SM_Cabbage_01v3",
+        x = 10, y = 0, z = 50, pitch = 0, yaw = 0, roll = 0, scale = 0.95, scaleY = 0.95, scaleZ = 0.95 }
+    local out = {}
+    -- A plant turned 90 degrees, at half size, 80 cm east and 60 cm north of the plot centre.
+    local plant = { loc = { X = 1080, Y = 2060, Z = 300 }, q = P.Quat(0, 90, 0), scale = { X = 0.5, Y = 0.5, Z = 0.5 } }
+    local rel, q, s = P.OnPlant(piece, plant, { X = 1000, Y = 2000, Z = 300 })
+    local rot = P.Rotator(q)
+    out[#out + 1] = string.format("rel %.1f,%.1f,%.1f yaw %.0f scale %.2f", rel.X, rel.Y, rel.Z, rot.Yaw, s.X)
+    -- A 1.4x plant: the piece stays natural size, its spot moves with the plant.
+    local big = { loc = { X = 0, Y = 0, Z = 0 }, q = P.Quat(0, 0, 0), scale = { X = 1.4, Y = 1.4, Z = 1.2 } }
+    local r2, _, s2 = P.OnPlant(piece, big)
+    out[#out + 1] = string.format("big %.1f,%.1f scale %.2f", r2.X, r2.Z, s2.Z)
+    -- Five plants, three pieces: fifteen instances, one set per plant, each with its own transform.
+    local frames = {}
+    for i = 1, 5 do frames[i] = { loc = { X = i * 100, Y = 0, Z = 0 }, q = P.Quat(0, i * 30, 0), scale = { X = 1, Y = 1, Z = 1 } } end
+    local all = P.OnPlants({ piece, piece, piece }, frames, { X = 0, Y = 0, Z = 0 })
+    local near = 0
+    for _, c in ipairs(all) do
+        local tf = P.Transform(c)
+        for i = 1, 5 do
+            local dx, dy = tf.Translation.X - i * 100, tf.Translation.Y
+            if math.sqrt(dx * dx + dy * dy) < 11 then near = near + 1 end
+        end
+    end
+    out[#out + 1] = string.format("n %d near %d world %.0f", #all, near, all[1].world.loc.Z)
+    out[#out + 1] = "orig " .. tostring(piece.tf == nil)
+    return table.concat(out, " | ")
+end""")()
+check("plot plants: a piece follows its plant's spot, turn and scale (10 cm out on a half-size plant turned 90 = 5 cm north, 25 cm up)",
+      onp.startswith("rel 80.0,65.0,25.0 yaw 90 scale 0.95"), onp)
+check("plot plants: the piece keeps natural size on a 1.4x plant while its spot scales", "big 14.0,60.0 scale 0.95" in onp, onp)
+check("plot plants: every plant of the plot gets the pieces (5 plants x 3 = 15, each beside its plant)", "n 15 near 15 world 50" in onp, onp)
+check("plot plants: the shared piece list is not modified", "orig true" in onp, onp)
+
+farm = L.eval(r"""function()
+    local P = require("horticulture_placements")
+    return table.concat({
+        tostring(P.FarmingPath("MaterialInstanceConstant /Game/Art/Item/Resources/Cabbage/Materials/MI_Cabbage_01.MI_Cabbage_01")),
+        tostring(P.FarmingPath("/Game/Art/Item/Resources/Potato/Materials/MI_Potato_Plant_01.MI_Potato_Plant_01")),
+        tostring(P.FarmingPath("MaterialInstanceConstant /Game/Art/Item/Resources/Cabbage/Materials/MI_Cabbage_01_Farming.MI_Cabbage_01_Farming")),
+        tostring(P.FarmingPath(nil)),
+    }, " | ")
+end""")()
+check("crop pieces: a vanilla crop material maps to its *_Farming twin (the plain one draws nothing on spawned meshes)",
+      farm.startswith("/Game/Art/Item/Resources/Cabbage/Materials/MI_Cabbage_01_Farming.MI_Cabbage_01_Farming | "
+                      "/Game/Art/Item/Resources/Potato/Materials/MI_Potato_Plant_01_Farming.MI_Potato_Plant_01_Farming"), farm)
+check("crop pieces: a *_Farming material or no material is left alone", farm.endswith("| nil | nil"), farm)
+
 # Primelet voice --------------------------------------------------------------
 voice = L.eval(r"""function()
     local Talk = require("horticulture_primelet_talk")

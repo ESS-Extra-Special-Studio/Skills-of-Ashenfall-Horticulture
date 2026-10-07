@@ -254,8 +254,52 @@ function Placements.World(piece, loc, rot, scale)
         { X = piece.scale * scale.X, Y = piece.scaleY * scale.Y, Z = piece.scaleZ * scale.Z }
 end
 
+-- A piece on one plant of a plot: frame is the plant's world transform
+-- { loc, q, scale } (one instance of the plot's instanced plant mesh). The
+-- position follows the plant's scale and turn so the piece stays on that
+-- plant; the piece keeps its natural size whatever the plant's scale.
+-- Returns the location relative to origin, the world quaternion and scale.
+function Placements.OnPlant(piece, frame, origin)
+    local s, o = frame.scale, origin or { X = 0, Y = 0, Z = 0 }
+    local v = Placements.Rotate(frame.q, { X = piece.x * s.X, Y = piece.y * s.Y, Z = piece.z * s.Z })
+    local q = Placements.QuatMul(frame.q, Placements.Quat(piece.pitch, piece.yaw, piece.roll))
+    return { X = frame.loc.X + v.X - o.X, Y = frame.loc.Y + v.Y - o.Y, Z = frame.loc.Z + v.Z - o.Z }, q,
+        { X = piece.scale, Y = piece.scaleY, Z = piece.scaleZ }
+end
+
+-- Every piece on every plant: copies of the pieces, each with tf (the
+-- FTransform relative to origin) and world (loc, rot, scale).
+function Placements.OnPlants(pieces, frames, origin)
+    local out = {}
+    for _, f in ipairs(frames) do
+        for _, p in ipairs(pieces) do
+            local rel, q, scl = Placements.OnPlant(p, f, origin)
+            local o = origin or { X = 0, Y = 0, Z = 0 }
+            local c = {}
+            for k, v in pairs(p) do c[k] = v end
+            c.tf = { Rotation = q, Translation = rel, Scale3D = scl }
+            c.world = { loc = { X = rel.X + o.X, Y = rel.Y + o.Y, Z = rel.Z + o.Z }, rot = Placements.Rotator(q), scale = scl }
+            out[#out + 1] = c
+        end
+    end
+    return out
+end
+
+-- The vanilla crop materials (MI_Cabbage_01, MI_Potato_Plant_01, ...) draw
+-- nothing on meshes the mod spawns; their *_Farming twins, which the farm
+-- plots use, do. The twin's object path for a material's full name or path,
+-- or nil when it already is one.
+function Placements.FarmingPath(full)
+    local path = tostring(full or ""):match("(/%S+)$")
+    if not path then return nil end
+    local dir, name = path:match("^(.*)/([^/.]+)%.[^/]+$")
+    if not dir or name:find("_Farming$") then return nil end
+    return string.format("%s/%s_Farming.%s_Farming", dir, name, name)
+end
+
 -- The FTransform for an instance relative to its component.
 function Placements.Transform(piece)
+    if piece.tf then return piece.tf end
     return {
         Rotation = Placements.Quat(piece.pitch, piece.yaw, piece.roll),
         Translation = { X = piece.x, Y = piece.y, Z = piece.z },

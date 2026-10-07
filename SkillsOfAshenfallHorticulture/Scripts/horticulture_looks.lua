@@ -394,6 +394,29 @@ local function rotate(x, y, yawDeg)
     return x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a)
 end
 
+-- Paths only: the material objects themselves are looked up at each use.
+local farmingPaths = {}
+
+-- Swaps each slot's vanilla crop material for its *_Farming twin, when the
+-- game has one (see Placements.FarmingPath).
+local function use_farming_materials(comp)
+    local n = 0
+    pcall(function() n = tonumber(comp:GetNumMaterials()) or 0 end)
+    for slot = 0, n - 1 do
+        pcall(function()
+            local full = comp:GetMaterial(slot):GetFullName()
+            local twin = farmingPaths[full]
+            if twin == nil then
+                twin = Placements.FarmingPath(full) or false
+                farmingPaths[full] = twin
+            end
+            if not twin then return end
+            local m = load(twin)
+            if m then comp:SetMaterial(slot, m) else farmingPaths[full] = false end
+        end)
+    end
+end
+
 local function spawn(world, mesh, loc, rot, scale)
     local cls = load("/Script/Engine.StaticMeshActor")
     if not cls then return nil end
@@ -404,6 +427,7 @@ local function spawn(world, mesh, loc, rot, scale)
         comp:SetMobility(2)
         comp:SetStaticMesh(mesh)
         comp:SetCollisionEnabled(0)
+        if mesh then use_farming_materials(comp) end
     end)
     pcall(function() actor:SetActorEnableCollision(false) end)
     local s = type(scale) == "table" and scale or { X = scale, Y = scale, Z = scale }
@@ -869,6 +893,37 @@ local function comp_transform(c)
     return loc, rot, scl
 end
 
+-- A plot's plants: its PlantMesh is one InstancedStaticMeshComponent with a
+-- plant per instance (build 25632050: five, scaled 0.6-1.4, each turned its
+-- own way, up to a metre from the plot centre). One world frame per
+-- instance, read at each build as plain numbers; the component's own
+-- transform when it has no instances.
+local function plant_frames(comp, loc, rot, scl)
+    local frames = {}
+    local cls = ""
+    pcall(function() cls = comp:GetClass():GetFName():ToString() end)
+    if cls:find("InstancedStaticMeshComponent", 1, true) then
+        local n = 0
+        pcall(function() n = tonumber(comp:GetInstanceCount()) or 0 end)
+        for i = 0, n - 1 do
+            local t = {}
+            pcall(function()
+                comp:GetInstanceTransform(i, t, true)
+                local l, q, s = t.Translation, t.Rotation, t.Scale3D
+                frames[#frames + 1] = {
+                    loc = { X = l.X, Y = l.Y, Z = l.Z },
+                    q = { X = q.X, Y = q.Y, Z = q.Z, W = q.W },
+                    scale = { X = s.X, Y = s.Y, Z = s.Z },
+                }
+            end)
+        end
+    end
+    if #frames == 0 then
+        frames[1] = { loc = loc, q = Placements.Quat(rot.Pitch or 0, rot.Yaw or 0, rot.Roll or 0), scale = scl }
+    end
+    return frames
+end
+
 -- The data's material overrides on one component: a dynamic instance of
 -- the slot's material with the listed parameters. Best effort; a failure
 -- leaves the mesh's own material. The instance belongs to the component,
@@ -916,6 +971,7 @@ local function build_ism(world, b, t, pieces, tints, cull)
             if not ok or not U.valid(ism) then return n end
             pcall(function() ism:SetMobility(2) end)
             pcall(function() ism:SetStaticMesh(mesh) end)
+            use_farming_materials(ism)
             pcall(function() ism:SetCollisionEnabled(0) end)
             if cull then pcall(function() ism:SetCullDistances(0, cull) end) end
             for _, p in ipairs(group) do
@@ -944,7 +1000,12 @@ local function continue_actors(b)
         local p = b.queue[i]
         local mesh = load(p.path)
         if mesh then
-            local loc, rot, scl = Placements.World(p, b.t.loc, b.t.rot, b.t.scl)
+            local loc, rot, scl
+            if p.world then
+                loc, rot, scl = p.world.loc, p.world.rot, p.world.scale
+            else
+                loc, rot, scl = Placements.World(p, b.t.loc, b.t.rot, b.t.scl)
+            end
             local a = spawn(world, mesh, loc, rot, scl)
             if a then
                 b.actors[#b.actors + 1] = a
@@ -1038,6 +1099,13 @@ local function apply_placement(world, b, h, hybridId, g)
     local pieces = Placements.Pieces(shape, { havePak = havePak, cap = Looks.CAP.ism })
     local short = key:match("([^/]+)$")
     b.t = { loc = loc, rot = rot, scl = scl }
+    local frames = nil
+    if h.kind == "plot" then
+        frames = plant_frames(comp, loc, rot, scl)
+        pieces = Placements.OnPlants(pieces, frames, loc)
+        b.t = { loc = loc, rot = { Pitch = 0, Yaw = 0, Roll = 0 }, scl = { X = 1, Y = 1, Z = 1 } }
+        name = string.format("%s, %d plant(s)", name, #frames)
+    end
     if Looks.mode == "ism" then
         local n = build_ism(world, b, b.t, pieces, tintTables, cull)
         if n > 0 then
@@ -1052,6 +1120,10 @@ local function apply_placement(world, b, h, hybridId, g)
         Looks.mode = "actors"
     end
     b.queue = Placements.Pieces(shape, { havePak = havePak, cap = Looks.CAP.actors })
+    if frames then
+        b.queue = Placements.OnPlants(b.queue, frames, loc)
+        while #b.queue > Looks.CAP.actors do table.remove(b.queue) end
+    end
     b.qi, b.cull, b.tints = 1, cull, tintTables
     U.log(string.format("%s look: %d of %d piece(s) as actors on %s (%s), %d per refresh",
         hybridId, #b.queue, #shape.attachments, short, name, Looks.BATCH))
