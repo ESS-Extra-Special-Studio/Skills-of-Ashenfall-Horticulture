@@ -956,14 +956,29 @@ local function interact_pick()
     return true
 end
 
+-- Whether the game's prompt claims E. A growing crop plot's prompt does not
+-- (water and compost are on the mouse), and a Sprout stands beside the plot
+-- it was grafted on, so that prompt is up whenever the player is beside it.
+local function prompt_claims_e()
+    local target = World.PromptTarget()
+    if not target then return false end
+    local name = U.full(target)
+    local me = U.location(U.pawn())
+    if name == "" or not me then return true end
+    for _, c in ipairs(World.Nearby(me, 600)) do
+        if c.kind == "plot" and c.stage == 1 and U.full(c.actor) == name then return false end
+    end
+    return true
+end
+
 -- The game's interact key: picks from a hybrid tree, or tends a Primelet the
--- player faces, unless the game's own prompt is on something else.
+-- player faces, unless the game's own prompt is on something E acts on.
 function Splicing.Interact()
     if not (U.pc() and cfg.ESL.Character() and cfg.ESL.IsUnlocked(cfg.SKILL)) then return end
     if not ensure_state() then return end
     if interact_pick() then return end
     local p = near_primelet()
-    if not p or World.PromptTarget() then return end
+    if not p or prompt_claims_e() then return end
     tend(p)
 end
 

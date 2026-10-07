@@ -935,6 +935,22 @@ check("G beside it tends it", "TENDED|Primelet Sprout|" in c and "Primelet tende
 g.binds["E"]()
 c = g.take("cards")
 check("E tends it too, once a day", "PRIMELET|Primelet Sprout|It has had all the attention" in c, c)
+host = g.plot("FPD_Cabbage", 1, 50)
+host.actor = L.eval('{ GetFullName = function() return "BP_FarmPlot /host" end }')
+g.nearby = L.table_from([host])
+g.promptTarget = host.actor
+g.binds["E"]()
+c = g.take("cards")
+check("E still reaches it with the prompt on its growing host plot (that prompt has no E)", "PRIMELET|Primelet Sprout|" in c, c)
+host.stage = 2
+g.binds["E"]()
+c = g.take("cards")
+check("E is left to the game on a ripe plot (E harvests)", c == "", c)
+g.promptTarget = L.eval('{ GetFullName = function() return "BP_Chest /chest" end }')
+g.binds["E"]()
+c = g.take("cards")
+check("E is left to the game with the prompt on anything else", c == "", c)
+g.promptTarget = None
 g.press("ALT+G")
 c = g.take("cards")
 check("Alt+G picks it up", "PICKED UP|Primelet Sprout|" in c, c)
