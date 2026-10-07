@@ -31,10 +31,13 @@ local BOOK_MESH = "/Game/Art/Env/Props/Gameplay_Props/Lore_Book/SM_Lore_Book_01.
 local PREFERRED_TEMPLATE = "JOURNAL_Know_LoreScrap_C4"
 
 -- The lore book model is small and flat; at ground level the meadow grass
--- around the cabbage patch hides it.
-local BOOK_LIFT = 12
+-- around the cabbage patch hides it, so it rests a little above the ground.
+local BOOK_LIFT = 4
 local BOOK_SCALE = 1.75
 local SLOPE_SAMPLE = 40
+local SLOPE_RAYS = 8
+local SLOPE_OUTLIER = 8
+local SAMPLE_REACH = 100
 local SPAWN_RANGE = 15000
 local READ_RANGE = 300
 local TARGET_GRACE = 0.6
@@ -45,6 +48,7 @@ local cfg = nil
 local place = nil
 local groundZ = nil
 local groundUp = nil
+local groundClear = 0
 local book = nil
 local bookMode = nil
 local bookFor = nil
@@ -167,14 +171,15 @@ end
 
 -- Placement and spawning -------------------------------------------------
 
-local function trace_ground(x, y, nearZ)
+local function trace_ground(x, y, nearZ, reach)
     local ksl = UEHelpers.GetKismetSystemLibrary()
     local pawn = U.pawn()
     if not (U.valid(ksl) and pawn) then return nil end
     local hit = {}
     local color = { R = 0, G = 0, B = 0, A = 0 }
+    local up, down = reach or 5000, reach and reach * 2 or 5000
     local ok, wasHit = pcall(function()
-        return ksl:LineTraceSingle(pawn, { X = x, Y = y, Z = nearZ + 5000 }, { X = x, Y = y, Z = nearZ - 5000 },
+        return ksl:LineTraceSingle(pawn, { X = x, Y = y, Z = nearZ + up }, { X = x, Y = y, Z = nearZ - down },
             0, false, {}, 0, hit, true, color, color, 0.0)
     end)
     if not (ok and wasHit) then return nil end
@@ -184,28 +189,42 @@ local function trace_ground(x, y, nearZ)
     return z
 end
 
--- The book lies along the slope: four traces around the spot give the
--- ground's tilt, and the lift is along that up vector, so no corner sinks
--- into a hillside.
+-- The book lies along the slope: a plane fitted through traces over its
+-- footprint gives the ground's tilt (a root or the foot of a trunk is left
+-- out), and the book is lifted along that up vector just clear of the
+-- highest ground under it, so no corner sinks in and none hangs in the air.
+-- The traces start just above the ground, so a canopy or trunk overhead
+-- cannot be taken for it.
 local function spot()
     local p = place
-    local z = p.z or groundZ
-    if not z or not groundUp then
-        local me = U.location(U.pawn())
-        if not me then return nil end
-        local near = z or me.Z
+    if not groundZ or not groundUp then
+        local z = p.z
         if not z then
-            groundZ = trace_ground(p.x, p.y, near)
-            if not groundZ then return nil end
-            z = groundZ
+            local me = U.location(U.pawn())
+            if not me then return nil end
+            z = trace_ground(p.x, p.y, me.Z)
+            if not z then return nil end
         end
-        local r = SLOPE_SAMPLE
-        groundUp = Placement.Normal(trace_ground(p.x + r, p.y, z), trace_ground(p.x - r, p.y, z),
-            trace_ground(p.x, p.y + r, z), trace_ground(p.x, p.y - r, z), r)
-        U.log(string.format("Book ground at z %.0f, tilted %.1f degrees", z, math.deg(math.acos(groundUp.Z))))
+        local samples = { { 0, 0, trace_ground(p.x, p.y, z, SAMPLE_REACH) or z } }
+        for i = 0, SLOPE_RAYS - 1 do
+            local a = i * 2 * math.pi / SLOPE_RAYS
+            for _, r in ipairs({ SLOPE_SAMPLE / 2, SLOPE_SAMPLE }) do
+                local dx, dy = r * math.cos(a), r * math.sin(a)
+                samples[#samples + 1] = { dx, dy, trace_ground(p.x + dx, p.y + dy, z, SAMPLE_REACH) }
+            end
+        end
+        local n, planeZ, above, used = Placement.FitGround(samples, SLOPE_OUTLIER)
+        if n then
+            groundUp, groundZ, groundClear = n, planeZ, above
+        else
+            groundUp, groundZ, groundClear = { X = 0, Y = 0, Z = 1 }, z, 0
+        end
+        U.log(string.format("Book ground at z %.0f, tilted %.1f degrees, %d of %d samples, %.1f cm bump",
+            groundZ, math.deg(math.acos(groundUp.Z)), used or 0, #samples, groundClear))
     end
     local n = groundUp
-    return { X = p.x + n.X * BOOK_LIFT, Y = p.y + n.Y * BOOK_LIFT, Z = z + n.Z * BOOK_LIFT },
+    local lift = BOOK_LIFT + groundClear * n.Z
+    return { X = p.x + n.X * lift, Y = p.y + n.Y * lift, Z = groundZ + n.Z * lift },
         Placement.GroundRotation(n, p.yaw or 0)
 end
 

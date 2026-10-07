@@ -74,6 +74,7 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 - Fixed a crash the first time you picked a farm plot in build mode. Horticulture now pauses its background work while you build and for 3 seconds after, and plots still on the build cursor are left alone.
 - Farm plots are read correctly on the current game build, so plot crops give cuttings, take grafts and pay Farming XP.
 - The hymnal lies along sloping ground instead of sinking a corner into the hillside.
+- The hymnal sits flush on uneven or sloping ground (a root or rock under one edge no longer tips it) and no longer floats above the grass.
 - The Horticulture badge no longer goes missing on character select.
 
 ### Technical notes

@@ -2148,6 +2148,35 @@ check("book: on any slope its up axis is the ground normal and it still faces it
 check("book: facing downhill it tips forward (ground rising to +X, facing -X)", bk[2] == "uphill -63.4", bk[2])
 check("book: a missed trace leaves it flat", bk[3] in ("missing 1", "missing 1.0"), bk[3])
 
+gf = L.eval(r"""function()
+    local P = require("horticulture_placement")
+    local function ring(slope, dir, bump)
+        local s, gx, gy = {}, math.tan(math.rad(slope)) * math.cos(math.rad(dir)), math.tan(math.rad(slope)) * math.sin(math.rad(dir))
+        s[1] = { 0, 0, 500 }
+        for i = 0, 7 do
+            local a = i * math.pi / 4
+            for _, r in ipairs({ 20, 40 }) do
+                local dx, dy = r * math.cos(a), r * math.sin(a)
+                s[#s + 1] = { dx, dy, 500 + gx * dx + gy * dy + ((bump and i == 4 and r == 40) and bump or 0) }
+            end
+        end
+        return s
+    end
+    local out = {}
+    local n, z, above, used = P.FitGround(ring(28.7, 35), 8)
+    out[#out + 1] = string.format("plane %.2f %.2f %.2f %d", math.deg(math.acos(n.Z)), z, above, used)
+    n, z, above, used = P.FitGround(ring(28.7, 35, 45), 8)
+    out[#out + 1] = string.format("root %.2f %.2f %.2f %d", math.deg(math.acos(n.Z)), z, above, used)
+    n, z, above, used = P.FitGround(ring(15, 0, 5), 8)
+    out[#out + 1] = string.format("bump %.2f %d", above, used)
+    out[#out + 1] = "few " .. tostring(P.FitGround({ { 0, 0, 1 }, { 1, 0, nil }, { 0, 1, 1 } }, 8))
+    return table.concat(out, "\n")
+end""")().split("\n")
+check("book ground: a plane through the footprint gives the slope exactly", gf[0] == "plane 28.70 500.00 0.00 17", gf[0])
+check("book ground: a root under one corner is left out of the fit", gf[1] == "root 28.70 500.00 0.00 16", gf[1])
+check("book ground: a small bump is kept and the book is lifted clear of it", gf[2].startswith("bump ") and float(gf[2].split()[1]) > 3 and gf[2].endswith(" 17"), gf[2])
+check("book ground: too few samples gives no fit", gf[3] == "few nil", gf[3])
+
 # Rootstock through the game glue: dormancy, refresh, felling, tended harvest.
 drop(save)
 L = fresh()
