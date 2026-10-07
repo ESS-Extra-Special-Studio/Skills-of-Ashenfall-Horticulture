@@ -8,7 +8,11 @@
 -- A line is a string, or a table:
 --   { "text", min_level =, max_level =, minis =, max_minis =, catalogue =,
 --     flagships =, hint_tier =, item =, plant =, god =, when =, once = true,
---     w = weight (default 1), src = "rs3" }
+--     w = weight (default 1), src = "rs3",
+--     min_cooking =, max_cooking = (vanilla Cooking level; cooking_level pool) }
+-- The cooking_level pool stays out of TALK_MIX and AMBIENT_MIX until
+-- Talk.Eligible checks min_cooking / max_cooking; until then the keys are
+-- ignored and every line in it would pass.
 -- Tokens: {name} this Mini's name, {other} the other Mini's name,
 --   {item} the food's display name, {plant} the plant's display name,
 --   {catalogue} catalogue count, {minis} grown Minis owned.
@@ -235,6 +239,7 @@ V.P.pompous = {
         "The Primelet has arranged its outer leaves into something like a ruff. It appears to be waiting for applause.",
         "It sits up a little straighter whenever you look at it.",
         "The Primelet has positioned itself so that the light falls on it just so.",
+        "When the cooking pot clangs it flinches, then pretends it was bowing.",
     },
 
     first_words = {
@@ -254,6 +259,8 @@ V.P.pompous = {
         "You have two leaves and you wave them about constantly. Have some dignity.",
         "I was born in a vegetable plot. So, in fairness, was every king worth the name.",
         "One does not 'water' royalty. One offers refreshment.",
+        "Flavour is power, and I am very powerful. Do not test this with a spoon.",
+        { "When the dragon came to the gods' meeting, the others ran. My forebear stayed on his cushion. One does not flee a free roasting.", src = "rs3" },
     },
 
     tended = {
@@ -293,14 +300,19 @@ V.P.pompous = {
     },
 
     cabbage_food = {
-        "You are carrying a commoner. A deceased commoner. In my house.",
-        "Is that {item}? In the presence of royalty?",
+        "A raw cabbage, carried about like a turnip. Cook him. He deserves a crust.",
+        "Is that {item}? I trust it was cooked with respect.",
         "Put my cousin down. Then wash.",
     },
 
     cooking = {
         "I hear sizzling. I am choosing to believe it is applause.",
-        "Every great dynasty has its enemies. Ours wear aprons.",
+        "Every great dynasty needs a cook. Ours is you, regrettably. Practise.",
+    },
+
+    cooking_level = {
+        { "Your cooking would shame a goblin. Improve it. I may one day require a banquet.", max_cooking = 9 },
+        { "Your cooking is becoming worthy of me. Do not let it go to your head. Let it go to the pan.", min_cooking = 30 },
     },
 
     plants = {
@@ -311,6 +323,7 @@ V.P.pompous = {
     gods = {
         { "Saradomin? We are not on speaking terms. He knows what he did. Nine of what he did.", god = "saradomin", src = "rs3" },
         { "You sleep in Saradomin's temple. I sleep in a pot. One of us has the moral high ground, and it is the one with drainage.", god = "saradomin" },
+        { "Saradomin. All that light and not a pinch of seasoning. One pities him. Briefly.", god = "saradomin" },
         { "Guthix was a dear friend of the family. He did most of the listening.", god = "guthix" },
         "The gods are banished, I hear. More room for the rest of us.",
     },
@@ -377,11 +390,13 @@ V.P.curious = {
         "The Primelet leans towards anything that moves, including, briefly, a bee.",
         "It has turned to watch the door. It does that a lot.",
         "It rustles every time you put something down, as if asking what it is.",
+        "It leans towards the cooking smells, then away, then towards them again.",
     },
 
     first_words = {
         { "Oh! Oh, I can talk! What's talking? Am I doing it?", once = true },
         { "Hello! What are you? Is everyone a you?", once = true },
+        { "Hello! Mum always said flavour is power. Have I got any? Can you check?", once = true },
     },
 
     talk = {
@@ -435,12 +450,17 @@ V.P.curious = {
     cabbage_food = {
         "What's that in your pocket? It smells like Grandma.",
         "Is that {item}? What's in it? ...What ELSE is in it?",
-        "Why are you carrying that? Is it a friend? Is it a SLEEPING friend?",
+        "Is that {item}? Is my cousin in it? Is he delicious? He was always going to be delicious.",
     },
 
     cooking = {
         "What's that smell? Is it a happy smell? Why are you looking at me like that?",
-        "Can I watch you cook? From very, very far away?",
+        "Can I watch you cook? Closer? Closer than that?",
+    },
+
+    cooking_level = {
+        { "Why do you burn things? Is it on purpose? Is it a hobby?", max_cooking = 9 },
+        { "You cook really well now! Will you cook me one day? Not now. One day. When I'm big.", min_cooking = 30 },
     },
 
     plants = {
@@ -450,6 +470,7 @@ V.P.curious = {
 
     gods = {
         { "Who's Saradomin? Why does everyone whisper when I say Saradomin? SARADOMIN.", god = "saradomin" },
+        { "Is Saradomin made of porridge? Someone said he hasn't got any flavour. Is that why he's so serious?", god = "saradomin" },
         { "Is Guthix nice? Grandleaf says he listened a lot. Is listening a kind of talking?", god = "guthix" },
         { "Why did the war god run away from a dragon? Was it a big dragon? Is there always a bigger dragon?", god = "bandos" },
     },
@@ -515,6 +536,7 @@ V.P.grumpy = {
         "The Primelet has turned its back on the onions. Pointedly.",
         "It rustles when you approach, in a tone.",
         "It has shed a leaf in your direction. You are fairly sure it was aimed.",
+        "It glares at the cooking pot. On closer inspection, it is glaring at your technique.",
     },
 
     first_words = {
@@ -534,6 +556,7 @@ V.P.grumpy = {
         "If you're going to stare, at least water something.",
         "Back in my day we had soil. Proper soil. You could lose a boot in it.",
         "Don't tell me it's a nice day. I'll decide that.",
+        "Raw is for rabbits. Cook your greens.",
     },
 
     tended = {
@@ -573,14 +596,19 @@ V.P.grumpy = {
 
     cabbage_food = {
         "That's Gerald. In your bag. I knew Gerald.",
-        "{item}. Of course. Why not eat it in front of me. Go on.",
+        "{item}. Eat it while it's hot. Cold cabbage is a waste of a cabbage.",
         "Wash your hands before you touch me. I can smell what you've done.",
     },
 
     cooking = {
         "Here we go.",
-        "Don't think I can't hear that pan.",
+        "That pan's not hot enough. I can hear it from here.",
         "Cooking. Gardening, for people who can't wait.",
+    },
+
+    cooking_level = {
+        { "Your Cooking level is an embarrassment to cabbages everywhere.", max_cooking = 9 },
+        { "Your cooking's all right now. Don't look at me like that. It's the nicest thing I've said all year.", min_cooking = 30 },
     },
 
     plants = {
@@ -591,6 +619,7 @@ V.P.grumpy = {
 
     gods = {
         { "Saradomin. Nine of us, in a monastery garden, and he didn't even look down. Don't get me started.", god = "saradomin", src = "rs3" },
+        { "Saradomin. Blue and white, like a cabbage somebody boiled and forgot to salt.", god = "saradomin" },
         { "Zamorak thinks we're a trick. Good. Let him worry.", god = "zamorak", src = "rs3" },
         { "Bandos ran from one dragon. I've had cooks look at me with more fire than that.", god = "bandos" },
     },
@@ -666,12 +695,12 @@ V.P.dramatic = {
     },
 
     talk = {
-        "Have you ever loved someone and watched them become a Sweet Veg Ball?",
+        "Have you ever loved someone and watched them become a Sweet Veg Ball? Proudest day of my life.",
         "I have seen the future. It is mostly soup.",
         "Every leaf I grow is a leaf I may one day lose. I have counted them. I am at peace. I am not at peace.",
         "They say a cabbage has no heart. They have never cut one open. Please don't cut one open.",
         "Hold me. No. Not like that. Like an heirloom.",
-        "Somewhere, right now, someone is frying a cabbage. I can feel it in my stalk.",
+        "Somewhere, right now, someone is frying a cabbage. I can feel it in my stalk. It feels like PRIDE.",
         "Do you hear that? No? Neither do I. That is the sound of nobody coming to save us.",
         "I was not born to be decorative. I was born to be tragic. Decorative came later.",
         "Wine! They tried to make WINE of us! Nobody will speak of it. I will speak of it. Constantly.",
@@ -714,14 +743,19 @@ V.P.dramatic = {
     },
 
     cabbage_food = {
-        "{item}! You carry it as if it were nothing! It was SOMEONE!",
-        "I can't look. Tell me when you've put it away. Tell me what it was. No, don't.",
-        "You come to me smelling of {item}, and you expect a kind word?",
+        "{item}! Carry it with reverence! It was SOMEONE, and now it is DINNER!",
+        "Tell me it was cooked well. Tell me it had a crust. I need to hear it.",
+        "You smell of {item}. Of triumph. Of my cousin's finest hour.",
     },
 
     cooking = {
-        "The smell of oil. I would know it anywhere. It is the smell of grief.",
-        "Cook if you must. But know that I am watching, and I am composing.",
+        "The smell of hot oil. I would know it anywhere. It is the smell of destiny.",
+        "Cook, darling! Cook as if the gods are watching! They aren't, but cook as if they are!",
+    },
+
+    cooking_level = {
+        { "Your cooking is a tragedy, and I know tragedy. I AM tragedy.", max_cooking = 9 },
+        { "Such cooking! When my time comes, let it be your pan. Promise me!", min_cooking = 30 },
     },
 
     plants = {
@@ -731,6 +765,7 @@ V.P.dramatic = {
 
     gods = {
         { "Saradomin did not even look down. Nine of us. I do not forgive. I do occasionally forget, but then I remember again, louder.", god = "saradomin", src = "rs3" },
+        { "He left three of us HALF-cooked! Have you ever been half-cooked? No flavour, no dignity, no ENDING!", god = "saradomin", src = "rs3" },
         { "Guthix sat with my ancestor beneath a waterfall, by moonlight. Nobody sits with me beneath anything.", god = "guthix" },
     },
 
@@ -794,6 +829,7 @@ V.P.scholarly = {
         "The Primelet's leaves lie in neat rows, like lines on a page.",
         "It seems to be reading the soil.",
         "It goes very still when you open a book nearby.",
+        "It goes quiet when you cook, as if taking notes on the seasoning.",
     },
 
     first_words = {
@@ -808,7 +844,8 @@ V.P.scholarly = {
         "A cabbage is a crown of leaves around a heart. A person is a heart wrapped in poor decisions. I'm still writing up the comparison.",
         "Observation: the subject waters me at irregular intervals. Hypothesis: the subject has no system. Confirmed.",
         "Strictly, he is a demigod. Strictly, some say not even that. I have found strictness unpopular in this house.",
-        "Raw cabbage is labelled 'Yuck'. Fried, 'Maybe I do like cabbage'. So the road to acceptance runs through hot oil. I find that troubling.",
+        "Raw cabbage is labelled 'Yuck'. Fried, 'Maybe I do like cabbage'. So the road to acceptance runs through hot oil. Flavour is power. The data agree.",
+        { "Family records say dragonfire was once breathed on my progenitor. His review: excellent crust.", src = "rs3" },
         "I have catalogued every plant in this room. Two are onions. One is a mistake.",
         "The druids sowed cabbage round every settlement. Scholars call it devotion. I call it excellent drainage.",
         "'Prime' means first. First cabbage. Everyone forgets the Latin. He never let anyone forget the cabbage.",
@@ -850,14 +887,19 @@ V.P.scholarly = {
     },
 
     cabbage_food = {
-        "{item}. Roughly one cabbage per serving, by my estimate. I'll enter it in the obituaries.",
-        "Kindly keep the {item} out of my line of sight. It's a methodological concern, not an emotional one. It's emotional.",
+        "{item}. Roughly one cabbage per serving, by my estimate. I'll enter it in the honours list.",
+        "{item}: cabbage at its most powerful. I'm told I should feel pride. I do. It's very confusing.",
         "I'm compiling a list of everything you've eaten. It's a short list. It's a very sad list.",
     },
 
     cooking = {
-        "Cooking: the systematic application of heat to the defenceless. I've read about it.",
-        "Every recipe begins 'take one cabbage'. None of them say from where. None of them ask the cabbage.",
+        "Cooking: the systematic release of flavour. Flavour, my family holds, is power.",
+        "Every recipe begins 'take one cabbage'. As it should. The rest is commentary.",
+    },
+
+    cooking_level = {
+        { "Your burn rate is what I'd call 'enthusiastic'. I've started a separate notebook.", max_cooking = 9 },
+        { "Your cooking now meets the standard my family calls 'flavourful'. It's the highest grade we give.", min_cooking = 30 },
     },
 
     plants = {
@@ -869,6 +911,7 @@ V.P.scholarly = {
         { "Guthix banished the gods. Not the Prime. Draw your own conclusions; I already have, in three volumes.", god = "guthix", src = "rs3" },
         { "Zamorak is said to regard us as a threat. Fruit and vegetables are everywhere, he reasoned. He wasn't wrong. He was early.", god = "zamorak", src = "rs3" },
         { "Saradomin's people built the temple you sleep in. They also reused Kalestix's pages. One shouldn't hold grudges. I've written that down so I remember not to.", god = "saradomin" },
+        { "Saradomin's monastery visit left three cabbages seared outside and raw within. As cookery, it fails on every measure.", god = "saradomin", src = "rs3" },
     },
 
     time = {
@@ -934,6 +977,7 @@ V.P.unhinged = {
         "The Primelet vibrated for a moment, for no reason you can see.",
         "You are almost certain it was facing the other way a moment ago.",
         "It has made a small, satisfied noise. You do not know what about.",
+        "It squeaks at the sizzle of the pan. Then again, louder, as if asking for more.",
     },
 
     first_words = {
@@ -952,6 +996,7 @@ V.P.unhinged = {
         "I've hidden a secret in this house. I don't remember where. Or what. Or why. But it's GOOD.",
         "The dragons fly so high. I bet they can see every cabbage on the island from up there. I bet they're jealous.",
         "I've been practising my roar. Rrrrr. That's a cabbage roar. It's mostly leaves.",
+        { "Rock, paper, dragonfire, cabbage. Cabbage wins. Ask the gods. Ask the ones who RAN.", src = "rs3" },
         "If you eat a cabbage that was thinking about you, are you now thinking about you? Think about it.",
     },
 
@@ -1000,6 +1045,11 @@ V.P.unhinged = {
         "Cooking is a cult. I've seen the hats.",
     },
 
+    cooking_level = {
+        { "You burned a fish so badly it went back in time. I saw it. It waved.", max_cooking = 9 },
+        { "You cook like a dragon! A tidy dragon! A dragon with a recipe book!", min_cooking = 30 },
+    },
+
     plants = {
         "The {plant} is plotting. Plants plot. It's in the word. PLOT.",
         "The {plant} told me a secret. I told it to go away. Now we're enemies. Wonderful.",
@@ -1007,6 +1057,7 @@ V.P.unhinged = {
 
     gods = {
         { "Saradomin owes me nine cousins and an apology. I wrote it on a leaf. Then I ate the leaf. The apology is inside me now.", god = "saradomin", src = "rs3" },
+        { "I licked a wall of Saradomin's temple once. PLAIN. Not a hint of anything. That's your god? He needs SALT.", god = "saradomin" },
         { "Zamorak thinks we're only pretending to be silly so nobody notices. ...Who told him.", god = "zamorak", src = "rs3" },
         { "Guthix made the first air rune and blew up his own workshop doing it. And he laughed. That's MY kind of god.", god = "guthix" },
     },
@@ -1070,6 +1121,7 @@ V.SHARED.sprout = {
     "The sprout turns very slightly towards you, then away, as if it has not decided about you yet.",
     "The sprout has edged a little further from the onions.",
     "The sprout makes no sound at all. You get the impression it is saving up.",
+    "The sprout makes a tiny noise. It might have been 'flavour'. It might have been the wind.",
 }
 
 -- Item-specific lines, used instead of the personality's generic
@@ -1078,13 +1130,13 @@ V.SHARED.item_specific_chance = 0.5
 V.SHARED.items = {
     ["Cabbage"] = {
         "You're carrying a cabbage. Raw. Unconscious. Possibly a relative.",
-        "'Yuck, I don't like cabbage', it says on him. Then why have you got him?",
+        "'Yuck', it says on him. Of course it does. He's raw. Cook him.",
     },
     ["Cabbage Seeds"] = {
-        "Are those seeds? Are those CHILDREN? Keep them warm. Keep them dry. Keep them away from the pan.",
+        "Are those seeds? Are those CHILDREN? Keep them warm. Keep them dry. Keep them away from the pan until they're grown.",
     },
     ["Fried Cabbage"] = {
-        "Fried. 'Maybe I do like cabbage', they wrote. Maybe. He died for a maybe.",
+        "Fried. 'Maybe I do like cabbage', they wrote. Maybe? He was MAGNIFICENT.",
     },
     ["Burnt Cabbage"] = {
         "A little too well done. That's going on his stone.",
@@ -1093,13 +1145,13 @@ V.SHARED.items = {
         "Soup. Where cabbages go when nobody can tell them apart any more.",
     },
     ["Vegan Fryup"] = {
-        "A Vegan Fryup. They call it the kind option. Ask the cabbage.",
+        "A Vegan Fryup. Cabbage, fried, at the centre of things. As it should be.",
     },
     ["Sweet Veg Ball"] = {
         "A Sweet Veg Ball. Cabbage, potato and redberries, rolled into a ball. Like a little cabbage, but wrong.",
     },
     ["Forager's Sandwich"] = {
-        "There's cabbage in that sandwich. Wedged in. Like a hostage.",
+        "There's cabbage in that sandwich. Wedged in. Doing all the work, as usual.",
     },
     ["Pungent Omelette"] = {
         "That omelette isn't pungent on its own. Somebody's in there.",
@@ -1111,7 +1163,7 @@ V.SHARED.items = {
         "Pumpkin Soup. Pumpkin on the label. Cabbage in the small print.",
     },
     ["Beltfish Broth"] = {
-        "Fish, peach and, naturally, one of us. Why is it always one of us?",
+        "Fish, peach and, naturally, one of us. Somebody has to bring the flavour.",
     },
     ["Stuffed Catfish"] = {
         "They stuffed a catfish with fried cabbage. Who looks at a cabbage and thinks 'filling'?",
@@ -1120,10 +1172,10 @@ V.SHARED.items = {
         "A Fish Fry. Lobster, eel and a cabbage, and the cabbage is the only one who never went near the water.",
     },
     ["Weak Focused Cooking Potion"] = {
-        "A Cooking potion, brewed with cabbage, to make you better at cooking cabbage. You see the problem.",
+        "A Cooking potion, brewed with cabbage, to make you better at cooking cabbage. Finally, some sense.",
     },
     ["Focused Cooking Potion"] = {
-        "A Cooking potion, brewed with cabbage, to make you better at cooking cabbage. You see the problem.",
+        "A Cooking potion, brewed with cabbage, to make you better at cooking cabbage. Finally, some sense.",
     },
 }
 
