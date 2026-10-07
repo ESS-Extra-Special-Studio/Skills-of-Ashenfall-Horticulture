@@ -47,7 +47,7 @@ The first release. Needs ESL:DragonWilds 1.0.0 and Skills of Ashenfall: Historia
 - Now and then (1.5% by default), a cabbage grafted onto a cabbage becomes a Brassica Primelet instead of a Doubled Cabbage. It gets a secret catalogue entry.
 - Tend it once a day (E or G). Five tended days take it from Sprout to Brassica Primelet to Mini Brassica Prime.
 - Each one has its own personality and name, such as "Lord Savoy the Pompous".
-- A Mini Brassica Prime talks in a speech bubble above its pot: when you talk to it, when you move it, and now and then on its own.
+- A Mini Brassica Prime talks in a speech bubble above its pot: when you talk to it, when you move it, when you cook nearby, and now and then on its own. Some lines depend on your Cooking level.
 - Alt+G picks it up and G sets it down. A grown Mini takes a pot the first time you set it down. Raise as many as you like.
 
 **XP**

@@ -96,7 +96,8 @@ end
 local function as_line(line) return type(line) == "table" and line or { line } end
 
 -- ctx: { level, minis, catalogue, flagships, hintTier, ignoredDays, time,
--- playerInCentre, item, plant, other }.
+-- playerInCentre, item, plant, other, cooking }. cooking is the vanilla
+-- Cooking level, nil when unknown (then no min_cooking/max_cooking line plays).
 function Talk.Eligible(t, ctx)
     ctx = ctx or {}
     local level = ctx.level or 1
@@ -107,6 +108,9 @@ function Talk.Eligible(t, ctx)
     if t.catalogue and (ctx.catalogue or 0) < t.catalogue then return false end
     if t.flagships and (ctx.flagships or 0) < t.flagships then return false end
     if t.hint_tier and (ctx.hintTier or 0) < t.hint_tier then return false end
+    if (t.min_cooking or t.max_cooking) and type(ctx.cooking) ~= "number" then return false end
+    if t.min_cooking and ctx.cooking < t.min_cooking then return false end
+    if t.max_cooking and ctx.cooking > t.max_cooking then return false end
     if t.player_in_centre and not ctx.playerInCentre then return false end
     if type(t.when) == "number" and (ctx.ignoredDays or 0) < t.when then return false end
     if type(t.when) == "string" and ctx.time ~= t.when then return false end
@@ -205,7 +209,7 @@ end
 -- eligible.
 function Talk:Mix(mini, mix, ctx)
     local cands, total = {}, 0
-    for _, name in ipairs({ "talk", "level", "accomplishment", "gods", "hint", "time" }) do
+    for _, name in ipairs({ "talk", "level", "accomplishment", "gods", "hint", "time", "cooking_level" }) do
         local w = mix[name]
         if w and w > 0 and pool_has_line(self, mini, Talk.Pool(mini, name), ctx) then
             cands[#cands + 1] = { name = name, w = w }

@@ -4,8 +4,9 @@
 -- above the Mini, or in the name tag when no bubble can be drawn. It also
 -- polls for unprompted lines and checks where the potted Minis stand.
 --
--- Triggers the game cannot report yet are left out: cabbage food in the
--- satchel, cooking, rain, low health and death.
+-- Cooking is seen as a rise in the player's Cooking XP. Triggers the game
+-- cannot report yet are left out: cabbage food in the satchel, rain, low
+-- health and death.
 local Talk = require("horticulture_primelet_talk")
 local Primelet = require("horticulture_primelet")
 local Bubble = require("horticulture_bubble")
@@ -26,6 +27,15 @@ local standing = nil
 
 local function now() return os.clock() end
 local function rng(n) return math.random(n) end
+
+-- The vanilla Cooking level, read at most every 5 s; nil when unknown.
+local cookingCache = { at = -100 }
+local function cooking_level()
+    if now() - cookingCache.at < 5 then return cookingCache.level end
+    local ok, n = pcall(function() return cfg.ESL.GetVanillaLevel and cfg.ESL.GetVanillaLevel("Cooking") end)
+    cookingCache = { at = now(), level = ok and type(n) == "number" and n or nil }
+    return cookingCache.level
+end
 
 function Chatter.Init(util, config, h)
     U, cfg, hooks = util, config, h
@@ -66,7 +76,7 @@ local function ctx_for(p, extra)
     local last = p.talked or p.tended
     local c = {
         level = hooks.level(), minis = minis, catalogue = catalogue_count(), flagships = hooks.flagships(),
-        hintTier = Talk.HintTier(minis), time = time_of_day(),
+        hintTier = Talk.HintTier(minis), time = time_of_day(), cooking = cooking_level(),
         ignoredDays = last and last >= 0 and (st.dawn - last) or 0,
     }
     if not eng:TopicReady("hint", V.TIMING.hint_gap_s) then c.hintTier = 0 end
@@ -279,6 +289,24 @@ function Chatter.Poll()
             if Chatter.Event(p, "ambient") then return end
         end
     end
+end
+
+-- The player cooked something (Cooking XP rose): the nearest grown Mini
+-- within COOKING_RADIUS_CM remarks on it, at most once per cooking_gap_s.
+function Chatter.Cooked()
+    if not (eng and hooks.state()) then return nil end
+    local t = now()
+    if not eng:TopicReady("cooking", V.TIMING.cooking_gap_s, t) then return nil end
+    local loc = me()
+    if not loc then return nil end
+    local best, bestD = nil, V.COOKING_RADIUS_CM
+    for _, p in ipairs(Primelet.Visible(hooks.state(), World.WorldKey())) do
+        local d = dist(p, loc)
+        if Primelet.Grown(p) and d <= bestD then best, bestD = p, d end
+    end
+    local text = best and Chatter.Event(best, "cooking")
+    if text then eng:TopicUsed("cooking", t) end
+    return text
 end
 
 -- Every 100 ms: bubbles follow their Minis; delayed lines and turns.

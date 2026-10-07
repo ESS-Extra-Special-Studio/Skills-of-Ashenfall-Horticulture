@@ -9,10 +9,8 @@
 --   { "text", min_level =, max_level =, minis =, max_minis =, catalogue =,
 --     flagships =, hint_tier =, item =, plant =, god =, when =, once = true,
 --     w = weight (default 1), src = "rs3",
---     min_cooking =, max_cooking = (vanilla Cooking level; cooking_level pool) }
--- The cooking_level pool stays out of TALK_MIX and AMBIENT_MIX until
--- Talk.Eligible checks min_cooking / max_cooking; until then the keys are
--- ignored and every line in it would pass.
+--     min_cooking =, max_cooking = (vanilla Cooking level; cooking_level pool;
+--     a line with either never plays while the Cooking level is unknown) }
 -- Tokens: {name} this Mini's name, {other} the other Mini's name,
 --   {item} the food's display name, {plant} the plant's display name,
 --   {catalogue} catalogue count, {minis} grown Minis owned.
@@ -111,11 +109,13 @@ V.EVENT_TRIGGERS = {
 -- no eligible line for the current state drop out.
 V.TALK_MIX = {
     talk = 10, level = 2, accomplishment = 2, gods = 2, hint = 2, time = 1,
+    cooking_level = 2,
 }
 
 -- Unprompted (ambient) mix when no specific trigger is pending.
 V.AMBIENT_MIX = {
     talk = 6, gods = 2, time = 2, hint = 2, level = 1, accomplishment = 1,
+    cooking_level = 1,
 }
 
 -------------------------------------------------------------------------------

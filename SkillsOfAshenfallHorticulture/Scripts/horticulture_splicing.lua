@@ -1389,6 +1389,13 @@ function Splicing.Start(config)
     U.every(math.floor(Chatter.PollSeconds() * 1000), "Primelet chatter",
         function() U.game(function() if st and cfg.ESL.Character() then Chatter.Poll() end end) end)
     U.every(100, "Primelet bubbles", function() if Chatter.Busy() then U.game(Chatter.Tick) end end)
+    local cookXp, cookFor = nil, nil
+    U.every(1000, "Primelet cooking", function() U.game(function()
+        local who = st and cfg.ESL.Character()
+        local xp = who and World.CookingXp() or nil
+        if xp and cookXp and who == cookFor and xp > cookXp then Chatter.Cooked() end
+        cookXp, cookFor = xp, who
+    end) end)
     if cfg.nameTag ~= false then U.every(200, "Hybrid name tag", function() U.game(update_tag) end) end
     local key = Key[cfg.actionKey]
     RegisterKeyBindAsync(key, {}, function() U.game(Splicing.Action) end)

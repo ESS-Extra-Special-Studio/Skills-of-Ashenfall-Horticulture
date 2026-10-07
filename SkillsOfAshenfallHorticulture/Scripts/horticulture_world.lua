@@ -626,6 +626,7 @@ end
 local FARMING_ID = "PyUi-0LU_riFY46AnnFiWg"
 local XP_TABLE = "/Game/Gameplay/Progress/XPEventTables/DT_XPEvents_Farming.DT_XPEvents_Farming"
 local WOODCUTTING_ID = "4zYUGF5u_0KbMLkWJmmBbQ"
+local COOKING_ID = "Tn7t6DQyX0-Q0cM5K7B90A"
 local function skill_xp(sc, id)
     local xp = nil
     pcall(function()
@@ -645,6 +646,13 @@ function World.WoodcuttingXp()
     local sc = prop(U.pc(), "SkillComponent")
     if not U.valid(sc) then return nil end
     return skill_xp(sc, WOODCUTTING_ID)
+end
+
+-- The player's live Cooking XP, or nil. A rise means something was cooked.
+function World.CookingXp()
+    local sc = prop(U.pc(), "SkillComponent")
+    if not U.valid(sc) then return nil end
+    return skill_xp(sc, COOKING_ID)
 end
 
 function World.AddFarmingXp(amount, context)

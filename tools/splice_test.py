@@ -699,6 +699,8 @@ W.AddFarmingXp = function(n) xp[#xp + 1] = "Farming=" .. n return n end
 W.CropValues = function() return nil end
 wcxp = 0
 W.WoodcuttingXp = function() return wcxp end
+cookxp = nil
+W.CookingXp = function() return cookxp end
 local Looks = require("horticulture_looks")
 Looks.Init = function() end
 Looks.Apply = function(g, h, mode, id) applied[#applied + 1] = g.id .. ":" .. mode .. ":" .. id return 3 end
@@ -1699,6 +1701,47 @@ cfgt = L.eval(r"""function(tmp)
 end""")(TMP)
 check("config: primelet_chattiness reads off/quiet/normal/chatty, else normal", cfgt == "chatty normal normal", cfgt)
 
+# Cooking level lines (vanilla Cooking through ESL.GetVanillaLevel) ----------
+cook = L.eval(r"""function()
+    local Talk = require("horticulture_primelet_talk")
+    local V = Talk.V
+    local out = {}
+    local bad, lows, highs = 0, 0, 0
+    for key, P in pairs(V.P) do
+        for _, t in ipairs(P.cooking_level or {}) do
+            if type(t) ~= "table" or not (t.min_cooking or t.max_cooking) then bad = bad + 1 end
+            if t.max_cooking then lows = lows + 1 end
+            if t.min_cooking then highs = highs + 1 end
+            local function ok(c) return Talk.Eligible(t, { level = 25, cooking = c }) end
+            if t.max_cooking and (not ok(1) or not ok(t.max_cooking) or ok(t.max_cooking + 1) or ok(99)) then bad = bad + 1 end
+            if t.min_cooking and (ok(1) or ok(t.min_cooking - 1) or not ok(t.min_cooking) or not ok(99)) then bad = bad + 1 end
+            if Talk.Eligible(t, { level = 25 }) then bad = bad + 1 end
+        end
+    end
+    out[#out + 1] = string.format("bands %d low %d high %d", bad, lows, highs)
+    out[#out + 1] = string.format("mix %s %s", tostring(V.TALK_MIX.cooking_level), tostring(V.AMBIENT_MIX.cooking_level))
+    local m = { id = "c1", stage = 3, personality = "grumpy", name = "Crabbage", said = {} }
+    local function draws(ctx)
+        local e = Talk.New({ rng = function(n) return math.random(n) end, clock = function() return 0 end })
+        local n = 0
+        for i = 1, 400 do
+            local pool = e:Mix(m, { cooking_level = 1 }, ctx)
+            if pool == "cooking_level" then n = n + 1 end
+        end
+        return n
+    end
+    math.randomseed(7)
+    out[#out + 1] = string.format("draws unknown %d mid %d low %d high %d", draws({ level = 25 }),
+        draws({ level = 25, cooking = 20 }), draws({ level = 25, cooking = 5 }), draws({ level = 25, cooking = 40 }))
+    return table.concat(out, "\n")
+end""")()
+cl = dict(s.split(" ", 1) for s in cook.split("\n"))
+check("cooking: every cooking_level line has a band, stays in it and needs a known level", cl["bands"].startswith("0 ") and "low 6" in cl["bands"] and "high 6" in cl["bands"], cl["bands"])
+check("cooking: in the talk (2) and ambient (1) mixes", cl["mix"] == "2 1", cl["mix"])
+dr = dict(zip(cl["draws"].split()[::2], map(int, cl["draws"].split()[1::2])))
+check("cooking: no cooking line while Cooking is unknown or between the bands", dr["unknown"] == 0 and dr["mid"] == 0, cl["draws"])
+check("cooking: low and high Cooking levels draw the pool", dr["low"] > 0 and dr["high"] > 0, cl["draws"])
+
 # Mutation tints ------------------------------------------------------------
 mut = L.eval(r"""function(scripts, tmp)
     local M = require("horticulture_mutation")
@@ -2238,6 +2281,48 @@ check("glue wood: a chop counts while standing at its trunk even when the crossh
 if failures and os.environ.get("SPLICE_DEBUG"):
     for i in range(1, len(g.logs) + 1):
         print("  log:", g.logs[i])
+
+# Cooking nearby: a rise in Cooking XP makes the nearest grown Mini remark on it.
+L = fresh()
+L.execute(GLUE, SCRIPTS, TMP)
+cooked = L.eval(r"""function()
+    local Primelet = require("horticulture_primelet")
+    local Talk = require("horticulture_primelet_talk")
+    local st = S.State()
+    local p = Primelet.New(st, 200, 0, 0, "?", function() return 1 end)
+    p.stage, p.potted, p.personality, p.name = Primelet.GROWN_STAGE, true, "grumpy", "Crabbage"
+    local lines = {}
+    for _, l in ipairs(Talk.V.P.grumpy.cooking) do lines[type(l) == "table" and l[1] or l] = true end
+    local function said()
+        local n = 0
+        for _, s in ipairs(logs) do
+            local text = s:match("says: (.-)%s*$")
+            if text and lines[text] then n = n + 1 end
+        end
+        logs = {}
+        return n
+    end
+    local out = {}
+    cookxp = 100
+    tick() tick() tick()
+    out[#out + 1] = "flat " .. said()
+    cookxp = 130
+    tick()
+    out[#out + 1] = "rise " .. said()
+    local moving, T = os.clock, os.clock()
+    os.clock = function() return T + 60 end
+    cookxp = 160
+    tick()
+    out[#out + 1] = "gap " .. said()
+    os.clock = moving
+    p.x = 5000
+    for _ = 1, 40 do tick() end
+    cookxp = 200
+    tick()
+    out[#out + 1] = "far " .. said()
+    return table.concat(out, " ")
+end""")()
+check("cooking: a Cooking XP rise near a grown Mini gets one cooking line, then the 5 min gap", cooked == "flat 0 rise 1 gap 0 far 0", cooked)
 
 print("RESULT", "FAIL" if failures else "PASS")
 sys.exit(1 if failures else 0)
