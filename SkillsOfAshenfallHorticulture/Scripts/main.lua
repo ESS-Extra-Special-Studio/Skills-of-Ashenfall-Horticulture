@@ -60,7 +60,8 @@ ESL.RegisterSkill({
     name = "Horticulture",
     version = VERSION,
     mod = MOD,
-    iconFile = dir .. "\\..\\Textures\\horticulture-skill-icon.png",
+    -- Cooked into SoAHorticulture_P.pak beside Scripts (Textures\horticulture-skill-icon.png is its source).
+    iconFile = "/Game/Mods/SoAHorticulture/UI/T_HorticultureSkillIcon.T_HorticultureSkillIcon",
     capXp = 3152,
     maxLevel = 25,
     maxLevelText = "Horticulture 25: more to grow in a later version",

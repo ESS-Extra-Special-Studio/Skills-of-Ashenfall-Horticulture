@@ -1,6 +1,6 @@
 # Horticulture logo
 
-Skills of Ashenfall series logo: the shared frame with the shipped badge `SkillsOfAshenfallHorticulture/Textures/horticulture-skill-icon.png` in the centre, unchanged. Not packed into the release zip.
+Skills of Ashenfall series logo: the shared frame with the badge `SkillsOfAshenfallHorticulture/Textures/horticulture-skill-icon.png` (the source of the texture cooked into `SoAHorticulture_P`) in the centre, unchanged. Not packed into the release zip.
 
 - `horticulture-logo-plain-*.png`: no text. Use for the CurseForge project logo.
 - `horticulture-logo-series-*.png`: "Skills of Ashenfall" ribbon.

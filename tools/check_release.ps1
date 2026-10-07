@@ -1,5 +1,6 @@
 # Release check: required files present, nothing local tracked, Lua passes
-# the static checks. Run from the repo root before packaging.
+# the static checks, the pak has the badge, and a built zip holds only file
+# types CurseForge accepts. Run from the repo root before and after packaging.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $mod = Join-Path $root "SkillsOfAshenfallHorticulture"
@@ -15,11 +16,24 @@ if ($local) {
     Write-Host "FAIL: local-only files are tracked: $($local -join ', ')"
     $failed = $true
 }
-foreach ($name in @("Scripts\main.lua", "Textures\horticulture-skill-icon.png", "enabled.txt", "LICENSE", "README.md")) {
+foreach ($name in @("Scripts\main.lua", "enabled.txt", "LICENSE", "README.md", "CHANGELOG.md", "SoAHorticulture_P.pak", "SoAHorticulture_P.utoc", "SoAHorticulture_P.ucas")) {
     if (-not (Test-Path (Join-Path $mod $name))) {
         Write-Host "FAIL: $name is missing"
         $failed = $true
     }
+}
+# The IoStore table of contents lists its package file names in plain text.
+$utoc = Join-Path $mod "SoAHorticulture_P.utoc"
+if ((Test-Path $utoc) -and -not [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($utoc)).Contains("T_HorticultureSkillIcon.uasset")) {
+    Write-Host "FAIL: SoAHorticulture_P has no T_HorticultureSkillIcon badge"
+    $failed = $true
+}
+foreach ($z in Get-ChildItem (Join-Path $root "dist") -Filter *.zip -ErrorAction SilentlyContinue) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::OpenRead($z.FullName)
+    try { $wrong = @($archive.Entries | Where-Object { $_.Name -and $_.Name -notmatch '\.(txt|lua|dll|pak|utoc|ucas)$' } | ForEach-Object FullName) }
+    finally { $archive.Dispose() }
+    foreach ($w in $wrong) { Write-Host "FAIL: dist\$($z.Name) holds $w (CurseForge accepts .txt .lua .dll .pak .utoc .ucas only)"; $failed = $true }
 }
 # The skill id names every player's save file.
 if (-not (Select-String -Path (Join-Path $mod "Scripts\main.lua") -SimpleMatch 'local SKILL = "Horticulture"' -Quiet)) {
