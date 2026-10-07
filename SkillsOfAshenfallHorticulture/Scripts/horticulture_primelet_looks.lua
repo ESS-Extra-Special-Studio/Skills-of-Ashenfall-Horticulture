@@ -48,8 +48,9 @@ end
 -- Stage keys follow horticulture_primelet.lua (sprout, primelet, primeling).
 function P.Stage(stageKey) return data and data.stages[stageKey] or nil end
 
--- Pieces for one stage and personality. Without the pak, the face and crown
--- (requires_pak) are left out: the vanilla cabbage and pot still show.
+-- Pieces for one stage and personality. Without the pak, the face, crown and
+-- Mini body (requires_pak) are left out: the vanilla cabbage and pot still show.
+-- With the pak, no_pak_only pieces (the Mini's vanilla cabbage) are left out.
 function P.Pieces(stageKey, personality, havePak)
     if not data then return nil end
     local byStage = data.looks[stageKey]
@@ -57,7 +58,7 @@ function P.Pieces(stageKey, personality, havePak)
     local list = byStage[personality] or byStage[data.personalities[1]]
     local out = {}
     for _, a in ipairs(list) do
-        if havePak or not a.requires_pak then
+        if (havePak and not a.no_pak_only) or (not havePak and not a.requires_pak) then
             out[#out + 1] = {
                 path = P.ObjectPath(a.mesh), group = a.group, name = a.name,
                 x = a.location[1], y = a.location[2], z = a.location[3],

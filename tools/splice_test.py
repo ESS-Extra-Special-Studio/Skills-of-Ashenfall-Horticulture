@@ -1667,7 +1667,7 @@ looks = L.eval(r"""function(scripts)
     return table.concat({ PL.File(), summary("sprout", "grumpy", false), summary("primeling", "grumpy", true), summary("primeling", "grumpy", false),
         string.format("%.2f", lift) }, "\n")
 end""")(SCRIPTS).split("\n")
-check("Primelet looks from the pipeline data file", looks[0] == "hort_plant_brassica_primelet_v001", looks[0])
+check("Primelet looks from the pipeline data file", looks[0] == "hort_plant_brassica_primelet_v002", looks[0])
 check("a sprout has no pot; without the pak no face pieces", " pot 0 face 0 " in looks[1], looks[1])
 check("a potted Mini stands in its pot; bubble above it", " pot 0 " not in looks[2] and looks[2].endswith("z 85"), looks[2])
 ppot = int(looks[2].split()[0]) - int(looks[3].split()[0])
